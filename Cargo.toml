@@ -1,11 +1,6 @@
 [workspace]
 
 members = [
-    "examples/diagramlayout",
-    "examples/graphcoloring",
-    "examples/knapsack",
-    "examples/nqueens",
-    "examples/nurserostering",
     "local-search",
 ]
 

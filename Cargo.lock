@@ -3,40 +3,5 @@
 version = 3
 
 [[package]]
-name = "diagramlayout"
-version = "0.1.0"
-dependencies = [
- "local-search",
-]
-
-[[package]]
-name = "graphcoloring"
-version = "0.1.0"
-dependencies = [
- "local-search",
-]
-
-[[package]]
-name = "knapsack"
-version = "0.1.0"
-dependencies = [
- "local-search",
-]
-
-[[package]]
 name = "local-search"
 version = "0.1.0"
-
-[[package]]
-name = "nqueens"
-version = "0.1.0"
-dependencies = [
- "local-search",
-]
-
-[[package]]
-name = "nurserostering"
-version = "0.1.0"
-dependencies = [
- "local-search",
-]
