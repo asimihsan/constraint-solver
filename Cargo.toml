@@ -1,0 +1,16 @@
+[workspace]
+
+members = [
+    "examples/diagramlayout",
+    "examples/graphcoloring",
+    "examples/knapsack",
+    "examples/nqueens",
+    "examples/nurserostering",
+    "local-search",
+]
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+incremental = false
