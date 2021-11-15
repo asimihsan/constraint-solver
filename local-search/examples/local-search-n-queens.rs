@@ -30,6 +30,12 @@ impl DecisionVariable for NQueensDecisionVariable {
     fn get_current_value(&self) -> &NQueensValue {
         &self.value
     }
+    fn new_with_value_replacement(&self, new_value: Self::V) -> Self {
+        NQueensDecisionVariable {
+            value: new_value,
+            column: self.column,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -44,7 +50,7 @@ impl std::fmt::Debug for NQueenSolution {
             .variables
             .iter()
             .enumerate()
-            .map(|(col, v)| (col, v.value.row as usize))
+            .map(|(col, v)| (v.value.row as usize, col))
             .collect();
         let mut output = String::new();
         for row in 0..(self.board_size * 2) + 1 {
@@ -74,20 +80,17 @@ impl std::fmt::Debug for NQueenSolution {
 }
 
 impl Solution for NQueenSolution {
+    type V = NQueensValue;
     type D = NQueensDecisionVariable;
 
-    fn get_hard_score(&self) -> i32 {
-        self.variables.iter().map(|v| self.get_violations(v)).sum()
-    }
-
-    fn is_feasible(&self) -> bool {
-        self.variables.iter().all(|v| self.get_violations(v) == 0)
+    fn get_variables(&self) -> &[Self::D] {
+        self.variables.as_ref()
     }
 
     fn get_violations(&self, decision_variable: &Self::D) -> i32 {
         let mut result = 0;
         for other in self
-            .variables
+            .get_variables()
             .iter()
             .filter(|other| decision_variable.column != other.column)
         {
@@ -104,19 +107,50 @@ impl Solution for NQueenSolution {
         }
         result
     }
+
+    fn new_solution_with_variable_replacement(
+        &self,
+        old_variable: &Self::D,
+        new_variable: Self::D,
+    ) -> Self {
+        NQueenSolution {
+            board_size: self.board_size,
+            variables: self
+                .get_variables()
+                .iter()
+                .map(|old_v| {
+                    if old_v == old_variable {
+                        new_variable.clone()
+                    } else {
+                        old_v.clone()
+                    }
+                })
+                .collect(),
+        }
+    }
 }
 
+#[derive(Clone)]
 struct NQueenNeighborhood {
     board_size: i32,
+    rng: <NQueenNeighborhood as Neighborhood>::R,
+}
+
+impl NQueenNeighborhood {
+    pub fn new(board_size: i32, rng: <NQueenNeighborhood as Neighborhood>::R) -> Self {
+        NQueenNeighborhood { board_size, rng }
+    }
 }
 
 impl Neighborhood for NQueenNeighborhood {
+    type V = NQueensValue;
+    type D = NQueensDecisionVariable;
     type S = NQueenSolution;
     type R = rand_pcg::Pcg64;
 
-    fn get_initial_solution(&self) -> Self::S {
+    fn get_initial_solution(&mut self) -> Self::S {
         let mut rows: Vec<i32> = (0..self.board_size).collect();
-        rows.shuffle(rng);
+        rows.shuffle(&mut self.rng);
         let variables = rows
             .iter()
             .enumerate()
@@ -131,17 +165,38 @@ impl Neighborhood for NQueenNeighborhood {
         }
     }
 
-    fn get_local_move(&self, start: &Self::S, rng: &mut Self::R) -> Self::S {
+    fn get_local_move(&mut self, _start: &Self::S) -> Self::S {
         todo!()
+    }
+
+    fn get_all_possible_values(
+        &self,
+    ) -> Vec<<<<NQueenNeighborhood as Neighborhood>::S as Solution>::D as DecisionVariable>::V>
+    {
+        (0..self.board_size)
+            .map(|i| NQueensValue { row: i })
+            .collect::<Vec<NQueensValue>>()
     }
 }
 
 fn main() {
     println!("local search n-queens example");
-    let mut rng = rand_pcg::Pcg64::seed_from_u64(42);
+    let rng = rand_pcg::Pcg64::seed_from_u64(44);
     let board_size = 8;
-    let solver: LocalSearchSolver<NQueensValue, NQueenSolution, NQueenNeighborhood> = LocalSearchSolver::new();
-    let solution = NQueenSolution::new(board_size, &mut rng);
+    let neighborhood = NQueenNeighborhood::new(board_size, rng);
+    let mut solver: LocalSearchSolver<
+        NQueensValue,
+        NQueensDecisionVariable,
+        NQueenSolution,
+        NQueenNeighborhood,
+    > = LocalSearchSolver::new(neighborhood);
+    for _ in 0..10 {
+        solver.iterate();
+        if solver.get_best_solution().get_hard_score() == 0 {
+            break;
+        }
+    }
+    let solution = solver.get_best_solution();
     println!("solution:\n{:?}", solution);
     println!("solution hard score: {:?}", solution.get_hard_score());
 }
