@@ -193,7 +193,7 @@ fn main() {
         NQueenNeighborhood,
         rand_pcg::Pcg64,
     > = LocalSearchSolver::new(neighborhood, solver_rng);
-    for _ in 0..10 {
+    for _ in 0..20 {
         solver.iterate();
         if solver.get_best_solution().get_hard_score() == 0 {
             break;

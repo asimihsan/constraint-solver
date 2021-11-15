@@ -145,7 +145,8 @@ where
             .map(|s| (s.get_hard_score(), s))
             .collect();
         new_solutions.sort_by_key(|x| x.0);
-        self.best_solution = new_solutions.first().unwrap().1.clone();
+        let new_solution = new_solutions.first().unwrap().1.clone();
+        self.best_solution = new_solution;
         println!(
             "new solution hard score: {}",
             self.best_solution.get_hard_score()
