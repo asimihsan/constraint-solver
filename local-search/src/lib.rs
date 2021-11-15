@@ -41,7 +41,7 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
             .sum()
     }
 
-    fn get_max_conflict_decision_variables(&mut self) -> Vec<&Self::D> {
+    fn get_max_conflict_decision_variables(&self) -> Vec<&Self::D> {
         let all_violations_values: Vec<(i32, &Self::D)> = self
             .get_variables()
             .iter()
@@ -72,7 +72,7 @@ pub trait Neighborhood: Clone + Send {
     type V: Value;
     type D: DecisionVariable;
     type S: Solution;
-    type R: rand::SeedableRng + ?Sized;
+    type R: rand::Rng;
 
     fn get_initial_solution(&mut self) -> Self::S;
     fn get_local_move(&mut self, start: &Self::S) -> Self::S;
@@ -85,7 +85,7 @@ where
     D: DecisionVariable<V = V>,
     S: Solution<V = V, D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
-    R: rand::SeedableRng + ?Sized,
+    R: rand::Rng,
 {
     phantom_v: PhantomData<V>,
     phantom_s: PhantomData<S>,
@@ -101,9 +101,9 @@ where
     D: DecisionVariable<V = V>,
     S: Solution<V = V, D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
-    R: rand::SeedableRng + ?Sized,
+    R: rand::Rng,
 {
-    pub fn new(mut neighborhood: N, mut rng: R) -> Self {
+    pub fn new(mut neighborhood: N, rng: R) -> Self {
         LocalSearchSolver {
             phantom_v: PhantomData,
             phantom_s: PhantomData,

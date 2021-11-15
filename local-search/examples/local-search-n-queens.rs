@@ -181,15 +181,18 @@ impl Neighborhood for NQueenNeighborhood {
 
 fn main() {
     println!("local search n-queens example");
-    let rng = rand_pcg::Pcg64::seed_from_u64(44);
+    let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(42);
+    let solver_rng = rand_pcg::Pcg64::seed_from_u64(42);
     let board_size = 8;
-    let neighborhood = NQueenNeighborhood::new(board_size, rng);
+
+    let neighborhood = NQueenNeighborhood::new(board_size, neighborhood_rng);
     let mut solver: LocalSearchSolver<
         NQueensValue,
         NQueensDecisionVariable,
         NQueenSolution,
         NQueenNeighborhood,
-    > = LocalSearchSolver::new(neighborhood, rng);
+        rand_pcg::Pcg64,
+    > = LocalSearchSolver::new(neighborhood, solver_rng);
     for _ in 0..10 {
         solver.iterate();
         if solver.get_best_solution().get_hard_score() == 0 {
