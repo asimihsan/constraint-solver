@@ -1,5 +1,7 @@
 use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
+use rand::prelude::SliceRandom;
+
 pub trait Value: Clone + Send + PartialEq + Eq + Hash + Ord + PartialOrd + Debug {}
 
 pub trait DecisionVariable: Clone + Send + PartialEq + Eq + Hash + Debug {
@@ -19,6 +21,7 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
 
     fn get_variables(&self) -> &[Self::D];
     fn get_violations(&self, decision_variable: &Self::D) -> i32;
+
     fn new_solution_with_variable_replacement(
         &self,
         old_variable: &Self::D,
@@ -38,11 +41,23 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
             .sum()
     }
 
-    fn get_max_conflict_decision_variable(&self) -> &Self::D {
-        self.get_variables()
+    fn get_max_conflict_decision_variables(&mut self) -> Vec<&Self::D> {
+        let all_violations_values: Vec<(i32, &Self::D)> = self
+            .get_variables()
             .iter()
-            .max_by_key(|v| self.get_violations(v))
-            .unwrap()
+            .map(|v| (self.get_violations(v), v))
+            .collect();
+        let max_violations_value = all_violations_values
+            .iter()
+            .map(|(value, v)| value)
+            .max()
+            .unwrap();
+        let max_conflict_variables: Vec<&Self::D> = all_violations_values
+            .iter()
+            .filter(|(value, _v)| value == max_violations_value)
+            .map(|(_value, v)| *v)
+            .collect();
+        max_conflict_variables
     }
 }
 
@@ -64,34 +79,38 @@ pub trait Neighborhood: Clone + Send {
     fn get_all_possible_values(&self) -> Vec<Self::V>;
 }
 
-pub struct LocalSearchSolver<V, D, S, N>
+pub struct LocalSearchSolver<V, D, S, N, R>
 where
     V: Value,
     D: DecisionVariable<V = V>,
     S: Solution<V = V, D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
+    R: rand::SeedableRng + ?Sized,
 {
     phantom_v: PhantomData<V>,
     phantom_s: PhantomData<S>,
     neighborhood: N,
     best_solution: S,
     all_possible_values: Vec<V>,
+    rng: R,
 }
 
-impl<V, D, S, N> LocalSearchSolver<V, D, S, N>
+impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
 where
     V: Value,
     D: DecisionVariable<V = V>,
     S: Solution<V = V, D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
+    R: rand::SeedableRng + ?Sized,
 {
-    pub fn new(mut neighborhood: N) -> Self {
+    pub fn new(mut neighborhood: N, mut rng: R) -> Self {
         LocalSearchSolver {
             phantom_v: PhantomData,
             phantom_s: PhantomData,
             neighborhood: neighborhood.clone(),
             best_solution: neighborhood.get_initial_solution(),
             all_possible_values: neighborhood.get_all_possible_values(),
+            rng,
         }
     }
 
@@ -105,9 +124,14 @@ where
 
     pub fn iterate(&mut self) {
         println!("iterating...");
-        println!("old solution hard score: {}", self.best_solution.get_hard_score());
+        println!(
+            "old solution hard score: {}",
+            self.best_solution.get_hard_score()
+        );
         println!("{:?}", self.best_solution);
-        let max_conflict_variable = self.best_solution.get_max_conflict_decision_variable();
+        let max_conflict_variables = self.best_solution.get_max_conflict_decision_variables();
+        println!("max_conflict_variables: {:?}", max_conflict_variables);
+        let max_conflict_variable = max_conflict_variables.choose(&mut self.rng).unwrap();
         println!("max_conflict_variable: {:?}", max_conflict_variable);
         let mut new_solutions: Vec<(i32, S)> = self
             .all_possible_values
@@ -122,7 +146,10 @@ where
             .collect();
         new_solutions.sort_by_key(|x| x.0);
         self.best_solution = new_solutions.first().unwrap().1.clone();
-        println!("new solution hard score: {}", self.best_solution.get_hard_score());
+        println!(
+            "new solution hard score: {}",
+            self.best_solution.get_hard_score()
+        );
         println!("{:?}", self.best_solution);
     }
 

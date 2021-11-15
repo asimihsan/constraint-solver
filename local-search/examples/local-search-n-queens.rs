@@ -189,7 +189,7 @@ fn main() {
         NQueensDecisionVariable,
         NQueenSolution,
         NQueenNeighborhood,
-    > = LocalSearchSolver::new(neighborhood);
+    > = LocalSearchSolver::new(neighborhood, rng);
     for _ in 0..10 {
         solver.iterate();
         if solver.get_best_solution().get_hard_score() == 0 {
