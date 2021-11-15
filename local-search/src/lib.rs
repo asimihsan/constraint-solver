@@ -1,10 +1,10 @@
 use std::{hash::Hash, marker::PhantomData};
 
-pub trait Value: Clone + Copy + Send + PartialEq + Eq + Hash + Ord + PartialOrd {}
+pub trait Value: Clone + Send + PartialEq + Eq + Hash + Ord + PartialOrd {}
 
-pub trait DecisionVariable {
+pub trait DecisionVariable: Clone + Send + PartialEq + Eq + Hash {
     type V: Value;
-    fn get_current_value(&self) -> Self::V;
+    fn get_current_value(&self) -> &Self::V;
 }
 
 // -    A pure satisfacation problem moves from an infeasible configuration and tries to find any feasible
@@ -15,7 +15,8 @@ pub trait DecisionVariable {
 pub trait Solution: Clone + Send + PartialEq + Eq + Hash {
     type D: DecisionVariable;
     fn is_feasible(&self) -> bool;
-    fn get_violations(&self, decision_variable: &Self::D) -> i64;
+    fn get_hard_score(&self) -> i32;
+    fn get_violations(&self, decision_variable: &Self::D) -> i32;
 }
 
 pub enum LocalSearchStrategy {
@@ -52,7 +53,7 @@ where
         todo!()
     }
 
-    fn _set_max_iterations(&mut self, _max_iterations: i64) {
+    fn _set_max_iterations(&mut self, _max_iterations: i32) {
         todo!()
     }
 
