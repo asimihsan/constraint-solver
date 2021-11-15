@@ -28,15 +28,17 @@ pub enum LocalSearchStrategy {
 
 pub trait Neighborhood {
     type S: Solution;
-    fn get_initial_solution(&self) -> Self::S;
-    fn get_local_move(&self, start: &Self::S) -> Self::S;
+    type R: rand::SeedableRng + ?Sized;
+
+    fn get_initial_solution() -> Self::S;
+    fn get_local_move(start: &Self::S) -> Self::S;
 }
 
 pub struct LocalSearchSolver<V, S, N>
 where
     V: Value,
     S: Solution,
-    N: Neighborhood,
+    N: Neighborhood<S = S>,
 {
     phantom_v: PhantomData<V>,
     phantom_s: PhantomData<S>,
@@ -46,30 +48,38 @@ where
 impl<V, S, N> LocalSearchSolver<V, S, N>
 where
     V: Value,
-    N: Neighborhood,
+    N: Neighborhood<S = S>,
     S: Solution,
 {
-    fn _set_strategy(&mut self, _strategy: LocalSearchStrategy) {
+    pub fn new() -> Self {
+        LocalSearchSolver{
+            phantom_v: PhantomData,
+            phantom_s: PhantomData,
+            phantom_n: PhantomData,
+        }
+    }
+
+    pub fn _set_strategy(&mut self, _strategy: LocalSearchStrategy) {
         todo!()
     }
 
-    fn _set_max_iterations(&mut self, _max_iterations: i32) {
+    pub fn _set_max_iterations(&mut self, _max_iterations: i32) {
         todo!()
     }
 
-    fn _iterate(&mut self) {
+    pub fn _iterate(&mut self) {
         todo!()
     }
 
-    fn _get_initial_solution(&mut self) -> S {
+    pub fn get_initial_solution(&mut self) -> S {
+        N::get_initial_solution()
+    }
+
+    pub fn _get_best_solution(&mut self) -> S {
         todo!()
     }
 
-    fn _get_best_solution(&mut self) -> S {
-        todo!()
-    }
-
-    fn _get_all_possible_values(&self) -> Vec<V> {
+    pub fn _get_all_possible_values(&self) -> Vec<V> {
         todo!()
     }
 }

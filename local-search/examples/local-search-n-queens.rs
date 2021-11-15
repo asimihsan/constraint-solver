@@ -1,6 +1,9 @@
+use std::collections::HashSet;
 use std::hash::Hash;
 
 use local_search::DecisionVariable;
+use local_search::LocalSearchSolver;
+use local_search::Neighborhood;
 use local_search::Solution;
 use local_search::Value;
 use rand::prelude::SliceRandom;
@@ -35,28 +38,38 @@ struct NQueenSolution {
     variables: Vec<NQueensDecisionVariable>,
 }
 
-impl NQueenSolution {
-    pub fn new<R: rand::Rng + ?Sized>(board_size: i32, rng: &mut R) -> Self {
-        let mut rows: Vec<i32> = (0..board_size).collect();
-        rows.shuffle(rng);
-        let variables = rows
-            .iter()
-            .enumerate()
-            .map(|(column, row)| NQueensDecisionVariable {
-                column: column as i32,
-                value: NQueensValue { row: *row },
-            })
-            .collect();
-        NQueenSolution {
-            board_size,
-            variables,
-        }
-    }
-}
-
 impl std::fmt::Debug for NQueenSolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NQueenSolution").field("board_size", &self.board_size).field("variables", &self.variables).finish()
+        let lookup: HashSet<(usize, usize)> = self
+            .variables
+            .iter()
+            .enumerate()
+            .map(|(col, v)| (col, v.value.row as usize))
+            .collect();
+        let mut output = String::new();
+        for row in 0..(self.board_size * 2) + 1 {
+            if row % 2 == 0 {
+                (0..(self.board_size * 4) + 1).for_each(|_| output += "-");
+                if row != self.board_size * 2 {
+                    output += "\n";
+                }
+                continue;
+            }
+            for col in 0..self.board_size {
+                if lookup.contains(&(((row - 1) / 2) as usize, col as usize)) {
+                    output += "| Q ";
+                } else {
+                    output += "|   ";
+                }
+                if col == self.board_size - 1 {
+                    output += "|";
+                }
+            }
+            if row != self.board_size * 2 {
+                output += "\n";
+            }
+        }
+        f.write_fmt(format_args!("{}", output))
     }
 }
 
@@ -93,11 +106,42 @@ impl Solution for NQueenSolution {
     }
 }
 
+struct NQueenNeighborhood {
+    board_size: i32,
+}
+
+impl Neighborhood for NQueenNeighborhood {
+    type S = NQueenSolution;
+    type R = rand_pcg::Pcg64;
+
+    fn get_initial_solution(&self) -> Self::S {
+        let mut rows: Vec<i32> = (0..self.board_size).collect();
+        rows.shuffle(rng);
+        let variables = rows
+            .iter()
+            .enumerate()
+            .map(|(column, row)| NQueensDecisionVariable {
+                column: column as i32,
+                value: NQueensValue { row: *row },
+            })
+            .collect();
+        NQueenSolution {
+            board_size: self.board_size,
+            variables,
+        }
+    }
+
+    fn get_local_move(&self, start: &Self::S, rng: &mut Self::R) -> Self::S {
+        todo!()
+    }
+}
+
 fn main() {
     println!("local search n-queens example");
     let mut rng = rand_pcg::Pcg64::seed_from_u64(42);
     let board_size = 8;
+    let solver: LocalSearchSolver<NQueensValue, NQueenSolution, NQueenNeighborhood> = LocalSearchSolver::new();
     let solution = NQueenSolution::new(board_size, &mut rng);
-    println!("solution: {:?}", solution);
+    println!("solution:\n{:?}", solution);
     println!("solution hard score: {:?}", solution.get_hard_score());
 }
