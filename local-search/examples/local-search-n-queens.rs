@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate derivative;
+
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 
@@ -38,7 +42,8 @@ impl DecisionVariable for NQueensDecisionVariable {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Derivative)]
+#[derivative(Clone, PartialEq, Eq, Hash)]
 struct NQueenSolution {
     board_size: i32,
     variables: Vec<NQueensDecisionVariable>,
@@ -181,9 +186,10 @@ impl Neighborhood for NQueenNeighborhood {
 
 fn main() {
     println!("local search n-queens example");
-    let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(42);
-    let solver_rng = rand_pcg::Pcg64::seed_from_u64(42);
-    let board_size = 8;
+    let seed = 45;
+    let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(seed);
+    let solver_rng = rand_pcg::Pcg64::seed_from_u64(seed);
+    let board_size = 500;
 
     let neighborhood = NQueenNeighborhood::new(board_size, neighborhood_rng);
     let mut solver: LocalSearchSolver<
@@ -193,13 +199,13 @@ fn main() {
         NQueenNeighborhood,
         rand_pcg::Pcg64,
     > = LocalSearchSolver::new(neighborhood, solver_rng);
-    for _ in 0..20 {
+    for _ in 0..100_000 {
         solver.iterate();
         if solver.get_best_solution().get_hard_score() == 0 {
             break;
         }
     }
     let solution = solver.get_best_solution();
-    println!("solution:\n{:?}", solution);
+    // println!("solution:\n{:?}", solution);
     println!("solution hard score: {:?}", solution.get_hard_score());
 }

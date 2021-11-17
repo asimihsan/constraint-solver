@@ -61,11 +61,21 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum LocalSearchStrategy {
-    // Over all decision variables, find the decision variable with the largest number of violations. Then ensure
-    // we know what all possible values of a decision variable is. Finally, change this max-conflig decision variable's
-    // value such that it has a minimum number of violations. If there are multiple such values choose one at random.
+    // Over all decision variables, find the decision variable with the largest number of violations. Then
+    // ensure we know what all possible values of a decision variable is. Finally, change this max-conflig
+    // decision variable's value such that it has a minimum number of violations. If there are multiple such
+    // values choose one at random.
     MaxMinConflict,
+
+    // Over all decision variables, pick a random decision variable. Then ensure we know what all possible
+    // values of a decision variable is. Finally, change this decision variable's value such that it has a
+    // minimum number of violations. If there are multiple such values choose one at random.
+    MinConflict,
+
+    // Choose random decision variable and assign random value.
+    Random,
 }
 
 pub trait Neighborhood: Clone + Send {
@@ -93,6 +103,7 @@ where
     best_solution: S,
     all_possible_values: Vec<V>,
     rng: R,
+    strategy: Vec<(LocalSearchStrategy, u8)>,
 }
 
 impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
@@ -111,6 +122,11 @@ where
             best_solution: neighborhood.get_initial_solution(),
             all_possible_values: neighborhood.get_all_possible_values(),
             rng,
+            strategy: vec![
+                (LocalSearchStrategy::MinConflict, 0),
+                (LocalSearchStrategy::MaxMinConflict, 7),
+                (LocalSearchStrategy::Random, 3),
+            ],
         }
     }
 
@@ -128,30 +144,73 @@ where
             "old solution hard score: {}",
             self.best_solution.get_hard_score()
         );
-        println!("{:?}", self.best_solution);
-        let max_conflict_variables = self.best_solution.get_max_conflict_decision_variables();
-        println!("max_conflict_variables: {:?}", max_conflict_variables);
-        let max_conflict_variable = max_conflict_variables.choose(&mut self.rng).unwrap();
-        println!("max_conflict_variable: {:?}", max_conflict_variable);
-        let mut new_solutions: Vec<(i32, S)> = self
-            .all_possible_values
-            .iter()
-            .map(|v| {
-                self.best_solution.new_solution_with_variable_replacement(
-                    max_conflict_variable,
-                    max_conflict_variable.new_with_value_replacement(v.clone()),
-                )
-            })
-            .map(|s| (s.get_hard_score(), s))
-            .collect();
-        new_solutions.sort_by_key(|x| x.0);
-        let new_solution = new_solutions.first().unwrap().1.clone();
-        self.best_solution = new_solution;
+        // println!("{:?}", self.best_solution);
+
+        let current_strategy = self
+            .strategy
+            .choose_weighted(&mut self.rng, |s| s.1)
+            .unwrap()
+            .0
+            .clone();
+        println!("current strategy: {:?}", current_strategy);
+        match current_strategy {
+            LocalSearchStrategy::MaxMinConflict | LocalSearchStrategy::MinConflict => {
+                let variable_to_use = match current_strategy {
+                    LocalSearchStrategy::MaxMinConflict => {
+                        let max_conflict_variables =
+                            self.best_solution.get_max_conflict_decision_variables();
+                        println!("max_conflict_variables: {:?}", max_conflict_variables);
+                        let max_conflict_variable =
+                            max_conflict_variables.choose(&mut self.rng).unwrap();
+                        println!("max_conflict_variable: {:?}", max_conflict_variable);
+                        max_conflict_variable.clone()
+                    }
+                    LocalSearchStrategy::MinConflict => {
+                        let random_variable = self
+                            .best_solution
+                            .get_variables()
+                            .choose(&mut self.rng)
+                            .unwrap();
+                        println!("random_variable: {:?}", random_variable);
+                        random_variable
+                    }
+                    _ => todo!(),
+                };
+                let mut new_solutions: Vec<(i32, S)> = self
+                    .all_possible_values
+                    .iter()
+                    .map(|v| {
+                        self.best_solution.new_solution_with_variable_replacement(
+                            variable_to_use,
+                            variable_to_use.new_with_value_replacement(v.clone()),
+                        )
+                    })
+                    .map(|s| (s.get_hard_score(), s))
+                    .collect();
+                new_solutions.sort_by_key(|x| x.0);
+                let new_solution = new_solutions.first().unwrap().1.clone();
+                self.best_solution = new_solution;
+            }
+            LocalSearchStrategy::Random => {
+                let random_variable = self
+                    .best_solution
+                    .get_variables()
+                    .choose(&mut self.rng)
+                    .unwrap();
+                let random_value = self.all_possible_values.choose(&mut self.rng).unwrap();
+                let new_solution = self.best_solution.new_solution_with_variable_replacement(
+                    random_variable,
+                    random_variable.new_with_value_replacement(random_value.clone()),
+                );
+                self.best_solution = new_solution;
+            }
+        }
+
         println!(
             "new solution hard score: {}",
             self.best_solution.get_hard_score()
         );
-        println!("{:?}", self.best_solution);
+        // println!("{:?}", self.best_solution);
     }
 
     pub fn get_best_solution(&mut self) -> &S {
