@@ -186,7 +186,7 @@ impl Neighborhood for NQueenNeighborhood {
 
 fn main() {
     println!("local search n-queens example");
-    let seed = 46;
+    let seed = 50;
     let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(seed);
     let solver_rng = rand_pcg::Pcg64::seed_from_u64(seed);
     let board_size = 256;

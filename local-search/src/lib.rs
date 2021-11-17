@@ -104,7 +104,7 @@ where
     all_possible_values: Vec<V>,
     rng: R,
     strategy: Vec<(LocalSearchStrategy, u8)>,
-    same_score_iteration_count: u32,
+    same_score_iteration_count: usize,
 }
 
 impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
@@ -192,24 +192,20 @@ where
                 self.best_solution = new_solution;
             }
             LocalSearchStrategy::Random => {
-                let random_count = if self.same_score_iteration_count > 10 {
-                    println!("*** JOSTLE!! ***");
-                    self.best_solution.get_variables().len() / 10
-                } else {
-                    1
-                };
+                let random_count  = 1;
+                let mut new_solution = self.best_solution.clone();
                 for _ in 0..random_count {
-                    let random_variable = self
-                        .best_solution
+                    let random_variable = new_solution
                         .get_variables()
                         .choose(&mut self.rng)
                         .unwrap();
                     let random_value = self.all_possible_values.choose(&mut self.rng).unwrap();
-                    self.best_solution = self.best_solution.new_solution_with_variable_replacement(
+                    new_solution = new_solution.new_solution_with_variable_replacement(
                         random_variable,
                         random_variable.new_with_value_replacement(random_value.clone()),
                     );
                 }
+                self.best_solution = new_solution;
             }
         }
 
