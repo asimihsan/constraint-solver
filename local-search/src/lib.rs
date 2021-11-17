@@ -21,7 +21,7 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
     type D: DecisionVariable;
 
     fn get_variables(&self) -> &[Self::D];
-    fn get_violations(&self, decision_variable: &Self::D) -> i32;
+    fn get_violations(&self, decision_variable: &Self::D) -> u64;
 
     fn new_solution_with_variable_replacement(
         &self,
@@ -35,7 +35,7 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
             .all(|v| self.get_violations(v) == 0)
     }
 
-    fn get_hard_score(&self) -> i32 {
+    fn get_hard_score(&self) -> u64 {
         self.get_variables()
             .iter()
             .map(|v| self.get_violations(v))
@@ -43,7 +43,7 @@ pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
     }
 
     fn get_max_conflict_decision_variables(&self) -> Vec<&Self::D> {
-        let all_violations_values: Vec<(i32, &Self::D)> = self
+        let all_violations_values: Vec<(u64, &Self::D)> = self
             .get_variables()
             .iter()
             .map(|v| (self.get_violations(v), v))
@@ -106,8 +106,9 @@ where
     rng: R,
     strategy: Vec<(LocalSearchStrategy, u8)>,
     same_score_iteration_count: usize,
+    iteration_count: u64,
     tabu_set: LinkedHashSet<S>,
-    tabu_capacity: usize,
+    tabu_capacity: u64,
 }
 
 impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
@@ -119,11 +120,15 @@ where
     R: rand::Rng,
 {
     pub fn new(mut neighborhood: N, rng: R) -> Self {
+        let initial_solution = neighborhood.get_initial_solution();
+        let all_possible_values = neighborhood.get_all_possible_values();
+        let solution_space_size =
+            initial_solution.get_variables().len() as u64 * all_possible_values.len() as u64;
         LocalSearchSolver {
             phantom_v: PhantomData,
             phantom_s: PhantomData,
             neighborhood: neighborhood.clone(),
-            best_solution: neighborhood.get_initial_solution(),
+            best_solution: initial_solution,
             all_possible_values: neighborhood.get_all_possible_values(),
             rng,
             strategy: vec![
@@ -132,8 +137,9 @@ where
                 (LocalSearchStrategy::Random, 2),
             ],
             same_score_iteration_count: 0,
+            iteration_count: 0,
             tabu_set: LinkedHashSet::new(),
-            tabu_capacity: 1000,
+            tabu_capacity: solution_space_size,
         }
     }
 
@@ -147,6 +153,7 @@ where
 
     pub fn iterate(&mut self) {
         println!("iterating...");
+        self.iteration_count += 1;
         let old_score = self.best_solution.get_hard_score();
         println!("old solution hard score: {}", old_score);
         // println!("{:?}", self.best_solution);
@@ -181,7 +188,7 @@ where
                     }
                     _ => todo!(),
                 };
-                let mut new_solutions: Vec<(i32, S)> = self
+                let mut new_solutions: Vec<(u64, S)> = self
                     .all_possible_values
                     .iter()
                     .map(|v| {
@@ -201,13 +208,11 @@ where
                 new_solution
             }
             LocalSearchStrategy::Random => {
-                let random_count  = 1;
+                let random_count = 1;
                 let mut new_solution = self.best_solution.clone();
                 for _ in 0..random_count {
-                    let random_variable = new_solution
-                        .get_variables()
-                        .choose(&mut self.rng)
-                        .unwrap();
+                    let random_variable =
+                        new_solution.get_variables().choose(&mut self.rng).unwrap();
                     let random_value = self.all_possible_values.choose(&mut self.rng).unwrap();
                     new_solution = new_solution.new_solution_with_variable_replacement(
                         random_variable,
@@ -221,12 +226,9 @@ where
         if self.tabu_set.contains(&new_solution) {
             println!("skip tabu solution");
             return;
-        } else if self.tabu_set.len() >= self.tabu_capacity {
-            self.tabu_set.pop_front();
-        }
-        self.tabu_set.insert(new_solution.clone());
+        };
 
-        self.best_solution = new_solution;
+        self.best_solution = new_solution.clone();
         let new_score = self.best_solution.get_hard_score();
         println!("new solution hard score: {}", new_score);
 
@@ -235,6 +237,15 @@ where
         } else {
             self.same_score_iteration_count = 0;
         }
+
+        if self.iteration_count % self.tabu_capacity * 10 == 0 {
+            println!("*** tabu clear ***");
+            self.tabu_set.clear();
+        } else if self.tabu_set.len() as u64 >= self.tabu_capacity {
+            self.tabu_set.pop_front();
+        }
+        self.tabu_set.insert(new_solution);
+
         // println!("{:?}", self.best_solution);
     }
 

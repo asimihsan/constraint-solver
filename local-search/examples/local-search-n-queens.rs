@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate derivative;
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 
@@ -15,7 +14,7 @@ use rand::SeedableRng;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 struct NQueensValue {
-    row: i32,
+    row: u64,
 }
 
 impl Value for NQueensValue {}
@@ -26,7 +25,7 @@ struct NQueensDecisionVariable {
 
     // In the n-queens problem the column for a decision variable is fixed because we know all queens must be
     // on distinct columns.
-    column: i32,
+    column: u64,
 }
 
 impl DecisionVariable for NQueensDecisionVariable {
@@ -45,7 +44,7 @@ impl DecisionVariable for NQueensDecisionVariable {
 #[derive(Derivative)]
 #[derivative(Clone, PartialEq, Eq, Hash)]
 struct NQueenSolution {
-    board_size: i32,
+    board_size: u64,
     variables: Vec<NQueensDecisionVariable>,
 }
 
@@ -92,19 +91,19 @@ impl Solution for NQueenSolution {
         self.variables.as_ref()
     }
 
-    fn get_violations(&self, decision_variable: &Self::D) -> i32 {
+    fn get_violations(&self, decision_variable: &Self::D) -> u64 {
         let mut result = 0;
         for other in self
             .get_variables()
             .iter()
             .filter(|other| decision_variable.column != other.column)
         {
-            let row_diff = decision_variable.value.row - other.value.row;
+            let row_diff = decision_variable.value.row as i64 - other.value.row as i64;
             if row_diff == 0 {
                 result += 1;
                 continue;
             }
-            let column_diff = decision_variable.column - other.column;
+            let column_diff = decision_variable.column as i64 - other.column as i64;
             if row_diff.abs() == column_diff.abs() {
                 result += 1;
                 continue;
@@ -137,12 +136,12 @@ impl Solution for NQueenSolution {
 
 #[derive(Clone)]
 struct NQueenNeighborhood {
-    board_size: i32,
+    board_size: u64,
     rng: <NQueenNeighborhood as Neighborhood>::R,
 }
 
 impl NQueenNeighborhood {
-    pub fn new(board_size: i32, rng: <NQueenNeighborhood as Neighborhood>::R) -> Self {
+    pub fn new(board_size: u64, rng: <NQueenNeighborhood as Neighborhood>::R) -> Self {
         NQueenNeighborhood { board_size, rng }
     }
 }
@@ -154,13 +153,13 @@ impl Neighborhood for NQueenNeighborhood {
     type R = rand_pcg::Pcg64;
 
     fn get_initial_solution(&mut self) -> Self::S {
-        let mut rows: Vec<i32> = (0..self.board_size).collect();
+        let mut rows: Vec<u64> = (0..self.board_size).collect();
         rows.shuffle(&mut self.rng);
         let variables = rows
             .iter()
             .enumerate()
             .map(|(column, row)| NQueensDecisionVariable {
-                column: column as i32,
+                column: column as u64,
                 value: NQueensValue { row: *row },
             })
             .collect();
@@ -186,7 +185,7 @@ impl Neighborhood for NQueenNeighborhood {
 
 fn main() {
     println!("local search n-queens example");
-    let seed = 53;
+    let seed = 46;
     let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(seed);
     let solver_rng = rand_pcg::Pcg64::seed_from_u64(seed);
     let board_size = 256;
