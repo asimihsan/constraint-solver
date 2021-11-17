@@ -104,6 +104,7 @@ where
     all_possible_values: Vec<V>,
     rng: R,
     strategy: Vec<(LocalSearchStrategy, u8)>,
+    same_score_iteration_count: u32,
 }
 
 impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
@@ -123,10 +124,11 @@ where
             all_possible_values: neighborhood.get_all_possible_values(),
             rng,
             strategy: vec![
-                (LocalSearchStrategy::MinConflict, 0),
+                (LocalSearchStrategy::MinConflict, 1),
                 (LocalSearchStrategy::MaxMinConflict, 7),
-                (LocalSearchStrategy::Random, 3),
+                (LocalSearchStrategy::Random, 2),
             ],
+            same_score_iteration_count: 0,
         }
     }
 
@@ -140,10 +142,8 @@ where
 
     pub fn iterate(&mut self) {
         println!("iterating...");
-        println!(
-            "old solution hard score: {}",
-            self.best_solution.get_hard_score()
-        );
+        let old_score = self.best_solution.get_hard_score();
+        println!("old solution hard score: {}", old_score);
         // println!("{:?}", self.best_solution);
 
         let current_strategy = self
@@ -159,10 +159,10 @@ where
                     LocalSearchStrategy::MaxMinConflict => {
                         let max_conflict_variables =
                             self.best_solution.get_max_conflict_decision_variables();
-                        println!("max_conflict_variables: {:?}", max_conflict_variables);
+                        // println!("max_conflict_variables: {:?}", max_conflict_variables);
                         let max_conflict_variable =
                             max_conflict_variables.choose(&mut self.rng).unwrap();
-                        println!("max_conflict_variable: {:?}", max_conflict_variable);
+                        // println!("max_conflict_variable: {:?}", max_conflict_variable);
                         max_conflict_variable.clone()
                     }
                     LocalSearchStrategy::MinConflict => {
@@ -171,7 +171,7 @@ where
                             .get_variables()
                             .choose(&mut self.rng)
                             .unwrap();
-                        println!("random_variable: {:?}", random_variable);
+                        // println!("random_variable: {:?}", random_variable);
                         random_variable
                     }
                     _ => todo!(),
@@ -192,24 +192,35 @@ where
                 self.best_solution = new_solution;
             }
             LocalSearchStrategy::Random => {
-                let random_variable = self
-                    .best_solution
-                    .get_variables()
-                    .choose(&mut self.rng)
-                    .unwrap();
-                let random_value = self.all_possible_values.choose(&mut self.rng).unwrap();
-                let new_solution = self.best_solution.new_solution_with_variable_replacement(
-                    random_variable,
-                    random_variable.new_with_value_replacement(random_value.clone()),
-                );
-                self.best_solution = new_solution;
+                let random_count = if self.same_score_iteration_count > 10 {
+                    println!("*** JOSTLE!! ***");
+                    self.best_solution.get_variables().len() / 10
+                } else {
+                    1
+                };
+                for _ in 0..random_count {
+                    let random_variable = self
+                        .best_solution
+                        .get_variables()
+                        .choose(&mut self.rng)
+                        .unwrap();
+                    let random_value = self.all_possible_values.choose(&mut self.rng).unwrap();
+                    self.best_solution = self.best_solution.new_solution_with_variable_replacement(
+                        random_variable,
+                        random_variable.new_with_value_replacement(random_value.clone()),
+                    );
+                }
             }
         }
 
-        println!(
-            "new solution hard score: {}",
-            self.best_solution.get_hard_score()
-        );
+        let new_score = self.best_solution.get_hard_score();
+        println!("new solution hard score: {}", new_score);
+
+        if old_score == new_score {
+            self.same_score_iteration_count += 1;
+        } else {
+            self.same_score_iteration_count = 0;
+        }
         // println!("{:?}", self.best_solution);
     }
 
