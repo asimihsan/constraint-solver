@@ -1,5 +1,6 @@
-use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, marker::PhantomData};
 
+use linked_hash_set::LinkedHashSet;
 use rand::prelude::SliceRandom;
 
 pub trait Value: Clone + Send + PartialEq + Eq + Hash + Ord + PartialOrd + Debug {}
@@ -105,6 +106,8 @@ where
     rng: R,
     strategy: Vec<(LocalSearchStrategy, u8)>,
     same_score_iteration_count: usize,
+    tabu_set: LinkedHashSet<S>,
+    tabu_capacity: usize,
 }
 
 impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
@@ -129,6 +132,8 @@ where
                 (LocalSearchStrategy::Random, 2),
             ],
             same_score_iteration_count: 0,
+            tabu_set: LinkedHashSet::new(),
+            tabu_capacity: 1000,
         }
     }
 
@@ -153,7 +158,7 @@ where
             .0
             .clone();
         println!("current strategy: {:?}", current_strategy);
-        match current_strategy {
+        let new_solution = match current_strategy {
             LocalSearchStrategy::MaxMinConflict | LocalSearchStrategy::MinConflict => {
                 let variable_to_use = match current_strategy {
                     LocalSearchStrategy::MaxMinConflict => {
@@ -185,11 +190,15 @@ where
                             variable_to_use.new_with_value_replacement(v.clone()),
                         )
                     })
+                    .filter(|s| !self.tabu_set.contains(s))
                     .map(|s| (s.get_hard_score(), s))
                     .collect();
                 new_solutions.sort_by_key(|x| x.0);
+                if new_solutions.is_empty() {
+                    return;
+                }
                 let new_solution = new_solutions.first().unwrap().1.clone();
-                self.best_solution = new_solution;
+                new_solution
             }
             LocalSearchStrategy::Random => {
                 let random_count  = 1;
@@ -205,10 +214,19 @@ where
                         random_variable.new_with_value_replacement(random_value.clone()),
                     );
                 }
-                self.best_solution = new_solution;
+                new_solution
             }
-        }
+        };
 
+        if self.tabu_set.contains(&new_solution) {
+            println!("skip tabu solution");
+            return;
+        } else if self.tabu_set.len() >= self.tabu_capacity {
+            self.tabu_set.pop_front();
+        }
+        self.tabu_set.insert(new_solution.clone());
+
+        self.best_solution = new_solution;
         let new_score = self.best_solution.get_hard_score();
         println!("new solution hard score: {}", new_score);
 

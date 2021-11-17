@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 derivative = "2.2.0"
+linked_hash_set = "0.1.4"
 rand = "0.8.4"
 rand_pcg = "0.3.1"
