@@ -12,6 +12,9 @@ use local_search::Value;
 use rand::prelude::SliceRandom;
 use rand::SeedableRng;
 
+use blake2::digest::{Update, VariableOutput};
+use blake2::VarBlake2b;
+
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 struct NQueensValue {
     row: u64,
@@ -84,7 +87,6 @@ impl std::fmt::Debug for NQueenSolution {
 }
 
 impl Solution for NQueenSolution {
-    type V = NQueensValue;
     type D = NQueensDecisionVariable;
 
     fn get_variables(&self) -> &[Self::D] {
@@ -150,7 +152,7 @@ impl Neighborhood for NQueenNeighborhood {
     type V = NQueensValue;
     type D = NQueensDecisionVariable;
     type S = NQueenSolution;
-    type R = rand_pcg::Pcg64;
+    type R = rand_chacha::ChaCha20Rng;
 
     fn get_initial_solution(&mut self) -> Self::S {
         let mut rows: Vec<u64> = (0..self.board_size).collect();
@@ -185,10 +187,51 @@ impl Neighborhood for NQueenNeighborhood {
 
 fn main() {
     println!("local search n-queens example");
-    let seed = 46;
-    let neighborhood_rng = rand_pcg::Pcg64::seed_from_u64(seed);
-    let solver_rng = rand_pcg::Pcg64::seed_from_u64(seed);
-    let board_size = 256;
+    let matches = clap::App::new("Local Search N-Queens Example")
+        .version("1.0")
+        .arg(
+            clap::Arg::with_name("seed")
+                .short("s")
+                .long("seed")
+                .value_name("STRING")
+                .help("Random seeed, any string")
+                .required(false)
+                .default_value("42")
+                .takes_value(true),
+        )
+        .arg(
+            clap::Arg::with_name("board_size")
+                .short("b")
+                .long("board-size")
+                .value_name("INT")
+                .help("Board size")
+                .required(false)
+                .default_value("8")
+                .takes_value(true)
+                .validator(|input| {
+                    if let Err(err) = input.parse::<u64>() {
+                        return Err(err.to_string());
+                    }
+                    Ok(())
+                }),
+        )
+        .get_matches();
+    const SEED_SIZE: usize = 32;
+    let input_seed = matches.value_of("seed").unwrap();
+    let mut hasher = VarBlake2b::new(SEED_SIZE).unwrap();
+    hasher.update(input_seed);
+    let mut seed: [u8; SEED_SIZE] = Default::default();
+    hasher.finalize_variable(|hashed_input_seed| {
+        seed.copy_from_slice(hashed_input_seed);
+    });
+
+    let neighborhood_rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    let solver_rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    let board_size = matches
+        .value_of("board_size")
+        .unwrap()
+        .parse::<u64>()
+        .unwrap();
 
     let neighborhood = NQueenNeighborhood::new(board_size, neighborhood_rng);
     let mut solver: LocalSearchSolver<
@@ -196,7 +239,7 @@ fn main() {
         NQueensDecisionVariable,
         NQueenSolution,
         NQueenNeighborhood,
-        rand_pcg::Pcg64,
+        rand_chacha::ChaCha20Rng,
     > = LocalSearchSolver::new(neighborhood, solver_rng);
     for _ in 0..100_000 {
         solver.iterate();

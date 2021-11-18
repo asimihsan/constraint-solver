@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
 use linked_hash_set::LinkedHashSet;
 use rand::prelude::SliceRandom;
@@ -17,7 +17,6 @@ pub trait DecisionVariable: Clone + Send + PartialEq + Eq + Hash + Debug {
 //      more optimal solutions. is_feasible is always true, and we're trying to minimize get_score.
 //      A constraint optimization problem combines both satisfaction and optimization.
 pub trait Solution: Clone + Send + PartialEq + Eq + Hash + Debug {
-    type V: Value;
     type D: DecisionVariable;
 
     fn get_variables(&self) -> &[Self::D];
@@ -94,7 +93,7 @@ pub struct LocalSearchSolver<V, D, S, N, R>
 where
     V: Value,
     D: DecisionVariable<V = V>,
-    S: Solution<V = V, D = D>,
+    S: Solution<D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
     R: rand::Rng,
 {
@@ -115,7 +114,7 @@ impl<V, D, S, N, R> LocalSearchSolver<V, D, S, N, R>
 where
     V: Value,
     D: DecisionVariable<V = V>,
-    S: Solution<V = V, D = D>,
+    S: Solution<D = D>,
     N: Neighborhood<V = V, D = D, S = S>,
     R: rand::Rng,
 {
