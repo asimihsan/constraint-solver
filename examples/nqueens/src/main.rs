@@ -51,6 +51,27 @@ struct NQueenSolution {
     variables: Vec<NQueensDecisionVariable>,
 }
 
+impl PartialOrd for NQueenSolution {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.get_hard_score().partial_cmp(&other.get_hard_score())
+    }
+}
+
+impl Ord for NQueenSolution {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.get_hard_score().cmp(&other.get_hard_score())
+    }
+}
+
+impl NQueenSolution {
+    pub fn new(board_size: u64, variables: Vec<NQueensDecisionVariable>) -> Self {
+        NQueenSolution {
+            board_size,
+            variables,
+        }
+    }
+}
+
 impl std::fmt::Debug for NQueenSolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let lookup: HashSet<(usize, usize)> = self
@@ -119,10 +140,9 @@ impl Solution for NQueenSolution {
         old_variable: &Self::D,
         new_variable: Self::D,
     ) -> Self {
-        NQueenSolution {
-            board_size: self.board_size,
-            variables: self
-                .get_variables()
+        NQueenSolution::new(
+            self.board_size,
+            self.get_variables()
                 .iter()
                 .map(|old_v| {
                     if old_v == old_variable {
@@ -132,7 +152,7 @@ impl Solution for NQueenSolution {
                     }
                 })
                 .collect(),
-        }
+        )
     }
 }
 
@@ -165,10 +185,7 @@ impl Neighborhood for NQueenNeighborhood {
                 value: NQueensValue { row: *row },
             })
             .collect();
-        NQueenSolution {
-            board_size: self.board_size,
-            variables,
-        }
+        NQueenSolution::new(self.board_size, variables)
     }
 
     fn get_local_move(&mut self, _start: &Self::S) -> Self::S {
