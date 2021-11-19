@@ -151,7 +151,18 @@ dependencies = [
  "linked_hash_set",
  "rand",
  "rand_chacha",
- "rand_pcg",
+]
+
+[[package]]
+name = "nqueens"
+version = "0.1.0"
+dependencies = [
+ "blake2",
+ "clap",
+ "derivative",
+ "local-search",
+ "rand",
+ "rand_chacha",
 ]
 
 [[package]]
@@ -220,15 +231,6 @@ name = "rand_hc"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core",
-]
-
-[[package]]
-name = "rand_pcg"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
 dependencies = [
  "rand_core",
 ]

@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "examples/nqueens",
     "local-search",
 ]
 
