@@ -1,8 +1,10 @@
 [workspace]
 
 members = [
+    "examples/diagram-box-only",
     "examples/nqueens",
     "local-search",
+    "math-util",
 ]
 
 [profile.release]
