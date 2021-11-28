@@ -13,9 +13,7 @@ use math_util::ackley::AckleyFunction;
 use rand::{prelude::SliceRandom, Rng};
 
 use crate::iterated_local_search::Perturbation;
-use crate::local_search::{
-    InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator,
-};
+use crate::local_search::{InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct AckleySolution {
@@ -143,15 +141,13 @@ impl MoveProposer for AckleyMoveProposer {
                 let mut current_solution = self.start_solution.clone();
                 match self.current_move {
                     MoveUpOrDown::Up => {
-                        current_solution.x[dimension_from_schedule] = FloatOrd(
-                            current_solution.x[dimension_from_schedule].0 + self.move_size,
-                        );
+                        current_solution.x[dimension_from_schedule] =
+                            FloatOrd(current_solution.x[dimension_from_schedule].0 + self.move_size);
                         self.current_move = MoveUpOrDown::Down;
                     }
                     MoveUpOrDown::Down => {
-                        current_solution.x[dimension_from_schedule] = FloatOrd(
-                            current_solution.x[dimension_from_schedule].0 - self.move_size,
-                        );
+                        current_solution.x[dimension_from_schedule] =
+                            FloatOrd(current_solution.x[dimension_from_schedule].0 - self.move_size);
                         self.current_dimension += 1;
                         self.current_move = MoveUpOrDown::Up;
                     }
@@ -171,5 +167,42 @@ impl MoveProposer for AckleyMoveProposer {
             start_solution: start.clone(),
             move_size: self.move_size,
         })
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Default)]
+pub struct AckleyPerturbation {}
+
+impl AckleyPerturbation {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Perturbation for AckleyPerturbation {
+    type _R = rand_chacha::ChaCha20Rng;
+    type _Solution = AckleySolution;
+    type _Score = AckleyScore;
+    type _SSC = AckleySolutionScoreCalculator;
+
+    fn propose_new_starting_solution(
+        &mut self,
+        current: &crate::local_search::ScoredSolution<Self::_Solution, Self::_Score>,
+        history: &crate::iterated_local_search::History<Self::_R, Self::_Solution, Self::_Score>,
+        rng: &mut Self::_R,
+    ) -> Self::_Solution {
+        // HACK full restart every 1000 iterations
+        if history.iteration_count % 100 == 0 {
+            let x_min = -32.768;
+            let x_max = 32.768;
+            AckleySolution {
+                x: (0..current.solution.x.len())
+                    .map(|_| FloatOrd(rng.gen_range(x_min..x_max)))
+                    .collect(),
+            }
+        } else {
+            current.solution.clone()
+        }
     }
 }

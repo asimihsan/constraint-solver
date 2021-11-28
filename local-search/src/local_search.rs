@@ -12,6 +12,32 @@ pub trait Solution: Clone + Send + PartialEq + Eq + std::hash::Hash + std::fmt::
 /// (hard score, soft score).
 pub trait Score: Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::fmt::Debug {}
 
+#[derive(Derivative)]
+#[derivative(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ScoredSolution<_Solution, _Score>
+where
+    _Solution: Solution,
+    _Score: Score,
+{
+    #[derivative(PartialOrd = "ignore")]
+    #[derivative(Ord = "ignore")]
+    pub solution: _Solution,
+
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub score: _Score,
+}
+
+impl<_Solution, _Score> ScoredSolution<_Solution, _Score>
+where
+    _Solution: Solution,
+    _Score: Score,
+{
+    pub fn new(solution: _Solution, score: _Score) -> Self {
+        Self { solution, score }
+    }
+}
+
 /// SolutionScoreCalculator calculates the hard and soft score for a given solution. Implementations do not have to be
 /// deterministic; some interesting results come out of randomly perturbing the score of solutions for e.g. the
 /// Traveling Salesperson Problem (TSP).
@@ -77,12 +103,7 @@ where
     SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
     MP: MoveProposer<R = R, Solution = _Solution>,
 {
-    pub fn new(
-        move_proposer: MP,
-        solution_score_calculator: SSC,
-        max_iterations: u64,
-        rng: R,
-    ) -> Self {
+    pub fn new(move_proposer: MP, solution_score_calculator: SSC, max_iterations: u64, rng: R) -> Self {
         LocalSearch {
             move_proposer,
             solution_score_calculator,
@@ -91,7 +112,7 @@ where
         }
     }
 
-    pub fn execute(&mut self, start: _Solution) -> _Solution {
+    pub fn execute(&mut self, start: _Solution) -> ScoredSolution<_Solution, _Score> {
         let mut current_solution = start;
         for _current_iteration in 0..self.max_iterations {
             match self
@@ -108,7 +129,10 @@ where
                 None => break,
             }
         }
-        current_solution
+        ScoredSolution::new(
+            current_solution.clone(),
+            self.solution_score_calculator.get_score(&current_solution),
+        )
     }
 }
 
@@ -162,18 +186,17 @@ mod ackley_tests {
 
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let start_score = solution_score_calculator.get_score(&start);
-        let end_score = solution_score_calculator.get_score(&end);
 
         println!(
             "start_score: {:?}, end_score: {:?}, start: {:?}, end: {:?}",
-            start_score, end_score, start, end
+            start_score, end.score, start, end
         );
         assert!(
-            end_score < start_score,
+            end.score < start_score,
             "expected end_score to be better than start_score"
         );
         assert_ne!(
-            start, end,
+            start, end.solution,
             "expected end solution to be different from start solution"
         );
     }
@@ -208,19 +231,14 @@ mod ackley_tests {
 
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let start_score = solution_score_calculator.get_score(&start);
-        let end_score = solution_score_calculator.get_score(&end);
 
         println!(
             "start_score: {:?}, end_score: {:?}, start: {:?}, end: {:?}",
-            start_score, end_score, start, end
+            start_score, end.score, start, end
         );
-        assert_abs_diff_eq!(
-            end_score.get_score(),
-            start_score.get_score(),
-            epsilon = 1e-12
-        );
+        assert_abs_diff_eq!(end.score.get_score(), start_score.get_score(), epsilon = 1e-12);
         assert_eq!(
-            start, end,
+            start, end.solution,
             "expected end solution to be same as start solution"
         );
     }

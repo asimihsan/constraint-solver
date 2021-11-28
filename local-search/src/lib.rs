@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate derivative;
+
 mod ackley;
 pub mod local_search;
 pub mod iterated_local_search;

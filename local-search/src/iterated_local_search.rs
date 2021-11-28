@@ -1,80 +1,147 @@
+/// iterated_local_search builds upon local_search, see [1] page 7 algorithm 1.
+///
+/// [1] Lourenço, Helena Ramalhinho, Olivier C. Martin and Thomas Stützle. "Iterated Local Search: Framework and
+/// Applications." (2010).
+use rand::prelude::SliceRandom;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use crate::local_search::InitialSolutionGenerator;
 use crate::local_search::LocalSearch;
 use crate::local_search::MoveProposer;
-/// iterated_local_search builds upon local_search, see [1] page 7 algorithm 1.
-///
-/// [1] Lourenço, Helena Ramalhinho, Olivier C. Martin and Thomas Stützle. "Iterated Local Search: Framework and
-/// Applications." (2010).
-use crate::local_search::{Score, Solution, SolutionScoreCalculator};
+use crate::local_search::Score;
+use crate::local_search::ScoredSolution;
+use crate::local_search::Solution;
+use crate::local_search::SolutionScoreCalculator;
 
-struct BestSolutions<S, R>
+/// AcceptanceCriterion takes the old local minima and new local minima, combines it with the history, and determines
+/// which one to use.
+
+#[derive(Derivative)]
+#[derivative(Default)]
+pub struct AcceptanceCriterion<_R, _Solution, _Score, _SSC>
 where
-    S: Solution,
-    R: rand::Rng,
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    _SSC: SolutionScoreCalculator,
 {
-    best_solutions: BTreeSet<S>,
-    capacity: usize,
-    phantom_r: PhantomData<R>,
+    phantom_r: PhantomData<_R>,
+    phantom_solution: PhantomData<_Solution>,
+    phantom_score: PhantomData<_Score>,
+    phantom_ssc: PhantomData<_SSC>,
 }
 
-impl<S, R> BestSolutions<S, R>
+impl<_R, _Solution, _Score, _SSC> AcceptanceCriterion<_R, _Solution, _Score, _SSC>
 where
-    S: Solution,
-    R: rand::Rng,
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    _SSC: SolutionScoreCalculator,
 {
-    pub fn new(capacity: usize) -> Self {
-        BestSolutions {
+    pub fn new() -> Self {
+        Self {
+            phantom_r: PhantomData,
+            phantom_solution: PhantomData,
+            phantom_score: PhantomData,
+            phantom_ssc: PhantomData,
+        }
+    }
+
+    pub fn choose(
+        &mut self,
+        existing_local_minima: ScoredSolution<_Solution, _Score>,
+        new_local_minima: ScoredSolution<_Solution, _Score>,
+        history: &History<_R, _Solution, _Score>,
+        rng: &mut _R,
+    ) -> ScoredSolution<_Solution, _Score> {
+        if new_local_minima.score < existing_local_minima.score {
+            return new_local_minima;
+        }
+        let choices = match history.get_random_best_solution(rng) {
+            Some(random_best_solution) => vec![existing_local_minima, new_local_minima, random_best_solution],
+            None => vec![existing_local_minima, new_local_minima],
+        };
+        choices.choose(rng).unwrap().clone()
+    }
+}
+
+/// History keeps track of the local minima that LocalSearch finds. You can then ask History for the best solutions
+/// it's seen so far.
+pub struct History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    best_solutions: BTreeSet<ScoredSolution<_Solution, _Score>>,
+    best_solutions_capacity: usize,
+    pub iteration_count: u64,
+    phantom_r: PhantomData<_R>,
+}
+
+impl<_R, _Solution, _Score> Default for History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    fn default() -> Self {
+        Self::new(16, 0)
+    }
+}
+
+impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    pub fn new(best_solutions_capacity: usize, iteration_count: u64) -> Self {
+        History {
             best_solutions: Default::default(),
-            capacity,
+            best_solutions_capacity,
+            iteration_count,
             phantom_r: PhantomData,
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.best_solutions.is_empty()
-    }
+    fn local_search_chose_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+        self.iteration_count += 1;
 
-    pub fn insert(&mut self, candidate_solution: &S) {
-        if self.best_solutions.len() < self.capacity {
-            self.best_solutions.insert(candidate_solution.clone());
+        if self.best_solutions.len() < self.best_solutions_capacity {
+            self.best_solutions.insert(solution.clone());
             return;
         }
 
         // TODO better heuristic for creating a diverse best solution set even if the candidate solution has a worse
         // score.
         let worst_solution = self.best_solutions.iter().next_back().unwrap().clone();
-        if candidate_solution.get_hard_score() <= worst_solution.get_hard_score() {
+        if solution.score < worst_solution.score {
             self.best_solutions.remove(&worst_solution);
-            self.best_solutions.insert(candidate_solution.clone());
+            self.best_solutions.insert(solution.clone());
         }
     }
 
-    pub fn get_random(&mut self, rng: &mut R) -> Option<S> {
+    pub fn get_random_best_solution(&self, rng: &mut _R) -> Option<ScoredSolution<_Solution, _Score>> {
         if self.best_solutions.is_empty() {
             return None;
         }
-        let best_solutions_vec: Vec<S> = self.best_solutions.iter().cloned().collect();
+        let best_solutions_vec: Vec<ScoredSolution<_Solution, _Score>> =
+            self.best_solutions.iter().cloned().collect();
         let random_best_solution = best_solutions_vec.choose(rng).unwrap().clone();
         Some(random_best_solution)
     }
 
-    pub fn get_best_multiple(&self, number_to_get: usize) -> Option<Vec<S>> {
+    pub fn get_best_multiple(&self, number_to_get: usize) -> Option<Vec<ScoredSolution<_Solution, _Score>>> {
         if self.best_solutions.is_empty() {
             return None;
         }
-        Some(
-            self.best_solutions
-                .iter()
-                .take(number_to_get)
-                .unwrap()
-                .cloned(),
-        )
+        let result = self.best_solutions.iter().take(number_to_get).cloned().collect();
+        Some(result)
     }
 
-    pub fn get_best(&self) -> Option<S> {
+    pub fn get_best(&self) -> Option<ScoredSolution<_Solution, _Score>> {
         if self.best_solutions.is_empty() {
             return None;
         }
@@ -83,64 +150,6 @@ where
 
     pub fn _clear(&mut self) {
         self.best_solutions.clear();
-    }
-}
-
-impl<S, R> Default for BestSolutions<S, R>
-where
-    S: Solution,
-    R: rand::Rng,
-{
-    fn default() -> Self {
-        BestSolutions::new(16)
-    }
-}
-
-/// History keeps track of the local minima that LocalSearch finds. You can then ask History for the best solutions
-/// it's seen so far.
-pub struct History<_R, _Solution, _Score, _SSC>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-    _SSC: SolutionScoreCalculator,
-{
-    best_solutions: BestSolutions<_Solution, _R>,
-}
-
-impl<_R, _Solution, _Score, _SSC> History<_R, _Solution, _Score, _SSC>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-    _SSC: SolutionScoreCalculator,
-{
-    pub fn new(best_solutions: BestSolutions<_Solution, _R>) -> Self {
-        History { best_solutions }
-    }
-
-    fn local_search_chose_solution(&mut self, solution: &_Solution) {
-        self.best_solutions.insert(solution);
-    }
-
-    fn get_best_solutions(&mut self, number_of_solutions: usize) -> Option<Vec<_Solution>> {
-        self.best_solutions.get_best_multiple(number_of_solutions)
-    }
-
-    fn get_best_solution(&mut self) -> Option<_Solution> {
-        self.best_solutions.get_best()
-    }
-}
-
-impl<_R, _Solution, _Score, _SSC> Default for History<_R, _Solution, _Score, _SSC>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-    _SSC: SolutionScoreCalculator,
-{
-    fn default() -> Self {
-        Self::new(Default::default())
     }
 }
 
@@ -154,28 +163,13 @@ pub trait Perturbation {
 
     fn propose_new_starting_solution(
         &mut self,
-        current: &Self::_Solution,
-        history: History<Self::_R, Self::_Solution, Self::_Score, Self::_SSC>,
+        current: &ScoredSolution<Self::_Solution, Self::_Score>,
+        history: &History<Self::_R, Self::_Solution, Self::_Score>,
+        rng: &mut Self::_R,
     ) -> Self::_Solution;
 }
 
-/// AcceptanceCriterion takes the old local minima and new local minima, combines it with the history, and determines
-/// which one to use.
-pub trait AcceptanceCriterion {
-    type _R: rand::Rng;
-    type _Solution: Solution;
-    type _Score: Score;
-    type _SSC: SolutionScoreCalculator<Solution = Self::_Solution, _Score = Self::_Score>;
-
-    fn choose(
-        &mut self,
-        existing_local_minima: Self::_Solution,
-        new_local_minima: Self::_Solution,
-        history: &History<Self::_R, Self::_Solution, Self::_Score, Self::_SSC>,
-    ) -> Self::_Solution;
-}
-
-pub struct IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P, _AC>
+pub struct IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
 where
     _R: rand::Rng,
     _Score: Score,
@@ -183,20 +177,19 @@ where
     _SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
     _MP: MoveProposer<R = _R, Solution = _Solution>,
     _ISG: InitialSolutionGenerator,
-    _P: Perturbation<_Solution = _Solution, _Score = _Score, _SSC = _SSC>,
-    _AC: AcceptanceCriterion<_Solution = _Solution, _Score = _Score, _SSC = _SSC>,
+    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
 {
     initial_solution_generator: _ISG,
     local_search: LocalSearch<_R, _Solution, _Score, _SSC, _MP>,
-    peturbation: _P,
-    history: History<_R, _Solution, _Score, _SSC>,
-    acceptance_criterion: _AC,
+    perturbation: _P,
+    history: History<_R, _Solution, _Score>,
+    acceptance_criterion: AcceptanceCriterion<_R, _Solution, _Score, _SSC>,
     max_iterations: u64,
     rng: _R,
 }
 
-impl<_R, _Solution, _Score, _SSC, _MP, _ISG, _P, _AC>
-    IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P, _AC>
+impl<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
+    IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
 where
     _R: rand::Rng,
     _Score: Score,
@@ -204,22 +197,21 @@ where
     _SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
     _MP: MoveProposer<R = _R, Solution = _Solution>,
     _ISG: InitialSolutionGenerator<R = _R, Solution = _Solution>,
-    _P: Perturbation<_Solution = _Solution, _Score = _Score, _SSC = _SSC>,
-    _AC: AcceptanceCriterion<_Solution = _Solution, _Score = _Score, _SSC = _SSC>,
+    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
 {
     pub fn new(
         initial_solution_generator: _ISG,
         local_search: LocalSearch<_R, _Solution, _Score, _SSC, _MP>,
-        peturbation: _P,
-        history: History<_R, _Solution, _Score, _SSC>,
-        acceptance_criterion: _AC,
+        perturbation: _P,
+        history: History<_R, _Solution, _Score>,
+        acceptance_criterion: AcceptanceCriterion<_R, _Solution, _Score, _SSC>,
         max_iterations: u64,
         rng: _R,
     ) -> Self {
         IteratedLocalSearch {
             initial_solution_generator,
             local_search,
-            peturbation,
+            perturbation,
             history,
             acceptance_criterion,
             max_iterations,
@@ -227,21 +219,94 @@ where
         }
     }
 
-    pub fn execute(&mut self) -> _Solution {
+    pub fn execute(&mut self) -> ScoredSolution<_Solution, _Score> {
         let initial = self
             .initial_solution_generator
             .generate_initial_solution(&mut self.rng);
         let mut current = self.local_search.execute(initial);
+        println!("iterated local search current: {:?}", &current);
         for _ in 0..self.max_iterations {
             self.history.local_search_chose_solution(&current);
-            let perturbed = self
-                .peturbation
-                .propose_new_starting_solution(&current, &self.history);
+            let perturbed =
+                self.perturbation
+                    .propose_new_starting_solution(&current, &self.history, &mut self.rng);
             let new = self.local_search.execute(perturbed);
             current = self
                 .acceptance_criterion
-                .choose(current, new, &self.history);
+                .choose(current, new, &self.history, &mut self.rng);
         }
-        self.history.get_best_solution().unwrap()
+        self.history.get_best().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod ackley_tests {
+    use crate::ackley::AckleyPerturbation;
+    use crate::ackley::{
+        AckleyInitialSolutionGenerator, AckleyMoveProposer, AckleyScore, AckleySolution,
+        AckleySolutionScoreCalculator,
+    };
+    use crate::iterated_local_search::AcceptanceCriterion;
+    use crate::iterated_local_search::History;
+    use crate::iterated_local_search::IteratedLocalSearch;
+    use crate::local_search::LocalSearch;
+    use crate::local_search::ScoredSolution;
+    use approx::assert_abs_diff_eq;
+    use float_ord::FloatOrd;
+    use rand::SeedableRng;
+
+    fn _ackley(seed: u64) -> ScoredSolution<AckleySolution, AckleyScore> {
+        println!("test: ackley");
+        let dimensions = 2;
+        let move_size = 0.1;
+        let max_iterations = 100_000;
+        let move_proposer = AckleyMoveProposer::new(dimensions, move_size);
+        let solution_score_calculator = AckleySolutionScoreCalculator::default();
+        let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let local_search: LocalSearch<
+            rand_chacha::ChaCha20Rng,
+            AckleySolution,
+            AckleyScore,
+            AckleySolutionScoreCalculator,
+            AckleyMoveProposer,
+        > = LocalSearch::new(
+            move_proposer,
+            solution_score_calculator,
+            max_iterations,
+            solver_rng,
+        );
+
+        let initial_solution_generator = AckleyInitialSolutionGenerator::new(dimensions);
+        let perturbation = AckleyPerturbation::default();
+        let history = History::<rand_chacha::ChaCha20Rng, AckleySolution, AckleyScore>::default();
+        let acceptance_criterion = AcceptanceCriterion::default();
+        let iterated_local_search_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let mut iterated_local_search: IteratedLocalSearch<
+            rand_chacha::ChaCha20Rng,
+            AckleySolution,
+            AckleyScore,
+            AckleySolutionScoreCalculator,
+            AckleyMoveProposer,
+            AckleyInitialSolutionGenerator,
+            AckleyPerturbation,
+        > = IteratedLocalSearch::new(
+            initial_solution_generator,
+            local_search,
+            perturbation,
+            history,
+            acceptance_criterion,
+            max_iterations,
+            iterated_local_search_rng,
+        );
+
+        return iterated_local_search.execute();
+    }
+
+    #[test]
+    fn ackley() {
+        for seed in 0..10 {
+            let solution = _ackley(seed);
+            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+        }
     }
 }
