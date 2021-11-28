@@ -12,6 +12,7 @@ use float_ord::FloatOrd;
 use math_util::ackley::AckleyFunction;
 use rand::{prelude::SliceRandom, Rng};
 
+use crate::iterated_local_search::Perturbation;
 use crate::local_search::{
     InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator,
 };
