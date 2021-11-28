@@ -224,8 +224,10 @@ where
             .initial_solution_generator
             .generate_initial_solution(&mut self.rng);
         let mut current = self.local_search.execute(initial);
-        println!("iterated local search current: {:?}", &current);
-        for _ in 0..self.max_iterations {
+        for i in 0..self.max_iterations {
+            // if i % 10_000 == 0 {
+            //     println!("iterated local search current: {:?}", &current);
+            // }
             self.history.local_search_chose_solution(&current);
             let perturbed =
                 self.perturbation
@@ -255,11 +257,10 @@ mod ackley_tests {
     use float_ord::FloatOrd;
     use rand::SeedableRng;
 
-    fn _ackley(seed: u64) -> ScoredSolution<AckleySolution, AckleyScore> {
+    fn _ackley(dimensions: usize, seed: u64) -> ScoredSolution<AckleySolution, AckleyScore> {
         println!("test: ackley");
-        let dimensions = 2;
-        let move_size = 0.1;
-        let max_iterations = 100_000;
+        let move_size = 0.01;
+        let local_search_max_iterations = 100_000;
         let move_proposer = AckleyMoveProposer::new(dimensions, move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
@@ -272,7 +273,7 @@ mod ackley_tests {
         > = LocalSearch::new(
             move_proposer,
             solution_score_calculator,
-            max_iterations,
+            local_search_max_iterations,
             solver_rng,
         );
 
@@ -281,6 +282,7 @@ mod ackley_tests {
         let history = History::<rand_chacha::ChaCha20Rng, AckleySolution, AckleyScore>::default();
         let acceptance_criterion = AcceptanceCriterion::default();
         let iterated_local_search_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let iterated_local_search_max_iterations = 10_000;
         let mut iterated_local_search: IteratedLocalSearch<
             rand_chacha::ChaCha20Rng,
             AckleySolution,
@@ -295,7 +297,7 @@ mod ackley_tests {
             perturbation,
             history,
             acceptance_criterion,
-            max_iterations,
+            iterated_local_search_max_iterations,
             iterated_local_search_rng,
         );
 
@@ -304,8 +306,21 @@ mod ackley_tests {
 
     #[test]
     fn ackley() {
+        let dimensions = 2;
         for seed in 0..10 {
-            let solution = _ackley(seed);
+            let solution = _ackley(dimensions, seed);
+            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+        }
+
+        let dimensions = 10;
+        for seed in 0..2 {
+            let solution = _ackley(dimensions, seed);
+            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+        }
+
+        let dimensions = 20;
+        for seed in 0..2 {
+            let solution = _ackley(dimensions, seed);
             println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
         }
     }

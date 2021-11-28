@@ -11,6 +11,7 @@
 use float_ord::FloatOrd;
 use math_util::ackley::AckleyFunction;
 use rand::{prelude::SliceRandom, Rng};
+use rand_distr::Distribution;
 
 use crate::iterated_local_search::Perturbation;
 use crate::local_search::{InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator};
@@ -170,13 +171,28 @@ impl MoveProposer for AckleyMoveProposer {
     }
 }
 
-#[derive(Derivative)]
-#[derivative(Default)]
-pub struct AckleyPerturbation {}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AckleyPerturbationStrategy {
+    ChangeSubset,
+    DoNothing
+}
+
+pub struct AckleyPerturbation {
+    strategy: Vec<(AckleyPerturbationStrategy, u64)>,
+}
 
 impl AckleyPerturbation {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(strategy: Vec<(AckleyPerturbationStrategy, u64)>) -> Self {
+        Self { strategy }
+    }
+}
+
+impl Default for AckleyPerturbation {
+    fn default() -> Self {
+        Self { strategy: vec![
+            (AckleyPerturbationStrategy::ChangeSubset, 100),
+            (AckleyPerturbationStrategy::DoNothing, 10),
+        ] }
     }
 }
 
@@ -189,20 +205,30 @@ impl Perturbation for AckleyPerturbation {
     fn propose_new_starting_solution(
         &mut self,
         current: &crate::local_search::ScoredSolution<Self::_Solution, Self::_Score>,
-        history: &crate::iterated_local_search::History<Self::_R, Self::_Solution, Self::_Score>,
+        _history: &crate::iterated_local_search::History<Self::_R, Self::_Solution, Self::_Score>,
         rng: &mut Self::_R,
     ) -> Self::_Solution {
-        // HACK full restart every 1000 iterations
-        if history.iteration_count % 100 == 0 {
-            let x_min = -32.768;
-            let x_max = 32.768;
-            AckleySolution {
-                x: (0..current.solution.x.len())
-                    .map(|_| FloatOrd(rng.gen_range(x_min..x_max)))
-                    .collect(),
+        let x_min = -32.768;
+        let x_max = 32.768;
+        let current_strategy = self.strategy.choose_weighted(rng, |s| s.1).unwrap().0.clone();
+        match current_strategy {
+            AckleyPerturbationStrategy::ChangeSubset => {
+                let mut new_solution = current.solution.clone();
+                let mut dimensions: Vec<usize> = (0..new_solution.x.len()).collect();
+                dimensions.shuffle(rng);
+                let number_of_dimensions_to_alter = rng.gen_range(0..dimensions.len());
+                let dimensions_to_alter: Vec<usize> = dimensions.into_iter().take(number_of_dimensions_to_alter).collect();
+                for i in dimensions_to_alter {
+                    let normal = rand_distr::Normal::new(new_solution.x[i].0, 1.0).unwrap();
+                    let v = normal.sample(rng);
+                    new_solution.x[i] = FloatOrd(v)
+                }
+                // println!("change subset perturbed {:?} to {:?}", &current.solution, &new_solution);
+                new_solution
             }
-        } else {
-            current.solution.clone()
+            AckleyPerturbationStrategy::DoNothing => {
+                current.solution.clone()
+            }
         }
     }
 }
