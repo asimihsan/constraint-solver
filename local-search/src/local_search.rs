@@ -48,12 +48,12 @@ where
 ///      more optimal solutions. Hard score always zero, trying to minimize soft score to zero.
 ///      A constraint optimization problem combines both satisfaction and optimization.
 pub trait SolutionScoreCalculator {
-    type Solution: Solution;
+    type _Solution: Solution;
     type _Score: Score;
 
     /// get_score calculates the score of a solution. See SolutionScoreCalculator doc for ideas about what the score
     /// should be.
-    fn get_score(&self, solution: &Self::Solution) -> Self::_Score;
+    fn get_score(&self, solution: &Self::_Solution) -> Self::_Score;
 }
 
 pub trait InitialSolutionGenerator {
@@ -86,7 +86,7 @@ where
     R: rand::Rng,
     _Solution: Solution,
     _Score: Score,
-    SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
+    SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
     MP: MoveProposer<R = R, Solution = _Solution>,
 {
     move_proposer: MP,
@@ -100,7 +100,7 @@ where
     R: rand::Rng,
     _Solution: Solution,
     _Score: Score,
-    SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
+    SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
     MP: MoveProposer<R = R, Solution = _Solution>,
 {
     pub fn new(move_proposer: MP, solution_score_calculator: SSC, max_iterations: u64, rng: R) -> Self {

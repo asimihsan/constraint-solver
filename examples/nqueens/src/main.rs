@@ -1,3 +1,7 @@
+
+
+
+
 // #[macro_use]
 // extern crate derivative;
 
@@ -12,15 +16,6 @@
 
 // use blake2::digest::{Update, VariableOutput};
 // use blake2::VarBlake2b;
-
-// #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-// struct NQueensVariable {
-//     row: u64,
-
-//     // In the n-queens problem the column for a decision variable is fixed because we know all queens must be
-//     // on distinct columns.
-//     column: u64,
-// }
 
 // impl Variable for NQueensDecisionVariable {
 //     type V = NQueensValue;

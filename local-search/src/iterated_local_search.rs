@@ -159,7 +159,7 @@ pub trait Perturbation {
     type _R: rand::Rng;
     type _Solution: Solution;
     type _Score: Score;
-    type _SSC: SolutionScoreCalculator<Solution = Self::_Solution, _Score = Self::_Score>;
+    type _SSC: SolutionScoreCalculator<_Solution = Self::_Solution, _Score = Self::_Score>;
 
     fn propose_new_starting_solution(
         &mut self,
@@ -174,7 +174,7 @@ where
     _R: rand::Rng,
     _Score: Score,
     _Solution: Solution,
-    _SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
+    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
     _MP: MoveProposer<R = _R, Solution = _Solution>,
     _ISG: InitialSolutionGenerator,
     _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
@@ -194,7 +194,7 @@ where
     _R: rand::Rng,
     _Score: Score,
     _Solution: Solution,
-    _SSC: SolutionScoreCalculator<Solution = _Solution, _Score = _Score>,
+    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
     _MP: MoveProposer<R = _R, Solution = _Solution>,
     _ISG: InitialSolutionGenerator<R = _R, Solution = _Solution>,
     _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,

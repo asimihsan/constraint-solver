@@ -53,10 +53,10 @@ impl Default for AckleySolutionScoreCalculator {
 }
 
 impl SolutionScoreCalculator for AckleySolutionScoreCalculator {
-    type Solution = AckleySolution;
+    type _Solution = AckleySolution;
     type _Score = AckleyScore;
 
-    fn get_score(&self, solution: &Self::Solution) -> Self::_Score {
+    fn get_score(&self, solution: &Self::_Solution) -> Self::_Score {
         let score = self.ackley_function.calculate(&solution.x);
         AckleyScore(FloatOrd(score))
     }
