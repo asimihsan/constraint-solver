@@ -254,14 +254,13 @@ mod ackley_tests {
     use crate::local_search::LocalSearch;
     use crate::local_search::ScoredSolution;
     use approx::assert_abs_diff_eq;
-    use float_ord::FloatOrd;
     use rand::SeedableRng;
 
     fn _ackley(dimensions: usize, seed: u64) -> ScoredSolution<AckleySolution, AckleyScore> {
-        println!("test: ackley");
-        let move_size = 0.01;
+        let min_move_size = 1e-3;
+        let max_move_size = 0.1;
         let local_search_max_iterations = 100_000;
-        let move_proposer = AckleyMoveProposer::new(dimensions, move_size);
+        let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
         let local_search: LocalSearch<
@@ -309,19 +308,22 @@ mod ackley_tests {
         let dimensions = 2;
         for seed in 0..10 {
             let solution = _ackley(dimensions, seed);
-            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
 
         let dimensions = 10;
-        for seed in 0..2 {
+        for seed in 0..1 {
             let solution = _ackley(dimensions, seed);
-            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
 
         let dimensions = 20;
-        for seed in 0..2 {
+        for seed in 0..1 {
             let solution = _ackley(dimensions, seed);
-            println!("iterated local search ackley seed {} solution score {:.2}: {:?}", seed, solution.score.get_score(), solution);
+            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
     }
 }

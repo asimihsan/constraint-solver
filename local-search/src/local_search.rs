@@ -158,10 +158,11 @@ mod ackley_tests {
     fn ackley_local_minima_found() {
         println!("test: ackley_local_minima_found");
         let dimensions = 2;
-        let move_size = 0.1;
+        let min_move_size = 1e-6;
+        let max_move_size = 0.1;
         let max_iterations = 100_000;
         let seed = 42;
-        let move_proposer = AckleyMoveProposer::new(dimensions, move_size);
+        let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let initial_solution_generator = AckleyInitialSolutionGenerator::new(dimensions);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
 
@@ -205,10 +206,11 @@ mod ackley_tests {
     fn ackley_when_starting_from_global_minima_does_not_move() {
         println!("test: ackley_when_starting_from_global_minima_does_not_move");
         let dimensions = 2;
-        let move_size = 0.1;
+        let min_move_size = 1e-6;
+        let max_move_size = 0.1;
         let max_iterations = 100_000;
         let seed = 42;
-        let move_proposer = AckleyMoveProposer::new(dimensions, move_size);
+        let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
 
         let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);

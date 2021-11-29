@@ -89,14 +89,16 @@ impl InitialSolutionGenerator for AckleyInitialSolutionGenerator {
 
 pub struct AckleyMoveProposer {
     dimensions: usize,
-    move_size: f64,
+    min_move_size: f64,
+    max_move_size: f64,
 }
 
 impl AckleyMoveProposer {
-    pub fn new(dimensions: usize, move_size: f64) -> Self {
+    pub fn new(dimensions: usize, min_move_size: f64, max_move_size: f64) -> Self {
         AckleyMoveProposer {
             dimensions,
-            move_size,
+            min_move_size,
+            max_move_size
         }
     }
 }
@@ -105,7 +107,8 @@ impl Default for AckleyMoveProposer {
     fn default() -> Self {
         Self {
             dimensions: 2,
-            move_size: 0.01,
+            min_move_size: 1e-6,
+            max_move_size: 0.1,
         }
     }
 }
@@ -159,14 +162,14 @@ impl MoveProposer for AckleyMoveProposer {
 
         let mut dimension_schedule: Vec<usize> = (0..self.dimensions).collect();
         dimension_schedule.shuffle(rng);
-
+        let move_size = rng.gen_range(self.min_move_size..self.max_move_size);
         Box::new(MoveIterator {
             dimension_schedule,
             current_dimension: 0,
             current_move: MoveUpOrDown::Up,
             dimensions: self.dimensions,
             start_solution: start.clone(),
-            move_size: self.move_size,
+            move_size,
         })
     }
 }
