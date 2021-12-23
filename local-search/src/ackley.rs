@@ -29,7 +29,13 @@ impl AckleySolution {
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AckleyScore(FloatOrd<f64>);
-impl Score for AckleyScore {}
+impl Score for AckleyScore {
+
+    /// Although we know the best score is 0.0 let's assume we don't know what the best score is.
+    fn is_best(&self) -> bool {
+        false
+    }
+}
 impl AckleyScore {
     pub fn get_score(&self) -> f64 {
         self.0 .0
@@ -208,11 +214,11 @@ impl Perturbation for AckleyPerturbation {
     fn propose_new_starting_solution(
         &mut self,
         current: &crate::local_search::ScoredSolution<Self::_Solution, Self::_Score>,
-        _history: &crate::iterated_local_search::History<Self::_R, Self::_Solution, Self::_Score>,
+        _history: &crate::local_search::History<Self::_R, Self::_Solution, Self::_Score>,
         rng: &mut Self::_R,
     ) -> Self::_Solution {
-        let x_min = -32.768;
-        let x_max = 32.768;
+        let _x_min = -32.768;
+        let _x_max = 32.768;
         let current_strategy = self.strategy.choose_weighted(rng, |s| s.1).unwrap().0.clone();
         match current_strategy {
             AckleyPerturbationStrategy::ChangeSubset => {

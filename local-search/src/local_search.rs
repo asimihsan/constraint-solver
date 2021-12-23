@@ -1,3 +1,10 @@
+use std::collections::BTreeSet;
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::marker::PhantomData;
+
+use rand::prelude::SliceRandom;
+
 /// local_search contains methods that represent a solution and proposing moves in the neighborhood of a solution.
 /// Use methods in this module you can discover local minima. This is the LocalSearch part of [1] section 2pages 2 and
 /// 3.
@@ -10,7 +17,11 @@ pub trait Solution: Clone + Send + PartialEq + Eq + std::hash::Hash + std::fmt::
 
 /// Score for a solution. Could just be e.g. u64, f64, num::Num. Could be more complicated like a tuple
 /// (hard score, soft score).
-pub trait Score: Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::fmt::Debug {}
+pub trait Score: Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::fmt::Debug {
+    /// Is this the best possible score. For some problem domains you do not know if there is a best score, so you
+    /// can return false.
+    fn is_best(&self) -> bool;
+}
 
 #[derive(Derivative)]
 #[derivative(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -80,6 +91,160 @@ pub trait MoveProposer {
     ) -> Box<dyn Iterator<Item = Self::Solution>>;
 }
 
+#[derive(Derivative)]
+#[derivative(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ScoredSolutionAndIterationAdded<_Solution, _Score>
+where
+    _Solution: Solution,
+    _Score: Score,
+{
+    scored_solution: ScoredSolution<_Solution, _Score>,
+    iteration: u64,
+}
+
+/// History keeps track of the all solutions that LocalSearch finds. You can then ask History for the best solutions
+/// it's seen so far, the tabu set, etc.
+pub struct History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    best_solutions: BTreeSet<ScoredSolution<_Solution, _Score>>,
+    best_solutions_capacity: usize,
+    all_solutions: VecDeque<ScoredSolutionAndIterationAdded<_Solution, _Score>>,
+    all_solutions_capacity: usize,
+    all_solutions_lookup: HashSet<_Solution>,
+    all_solution_iteration_expiry: u64,
+    pub iteration_count: u64,
+    phantom_r: PhantomData<_R>,
+}
+
+impl<_R, _Solution, _Score> Default for History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    fn default() -> Self {
+        Self::new(16, 10_000, 100_000)
+    }
+}
+
+impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+{
+    pub fn new(
+        best_solutions_capacity: usize,
+        all_solutions_capacity: usize,
+        all_solution_iteration_expiry: u64,
+    ) -> Self {
+        History {
+            best_solutions: Default::default(),
+            best_solutions_capacity,
+            all_solutions: VecDeque::with_capacity(all_solutions_capacity),
+            all_solutions_capacity,
+            all_solutions_lookup: Default::default(),
+            all_solution_iteration_expiry,
+            iteration_count: 0,
+            phantom_r: PhantomData,
+        }
+    }
+
+    pub fn seen_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+        self.iteration_count += 1;
+        self._pop_solution();
+        if self.all_solutions_lookup.contains(&solution.solution) {
+            return;
+        }
+        self._add_solution(solution);
+    }
+
+    fn _add_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+        while self.all_solutions.len() > self.all_solutions_capacity {
+            self._pop_solution();
+        }
+        self.all_solutions.push_front(ScoredSolutionAndIterationAdded {
+            scored_solution: solution.clone(),
+            iteration: self.iteration_count,
+        });
+        self.all_solutions_lookup.insert(solution.solution.clone());
+    }
+
+    fn _pop_solution(&mut self) {
+        loop {
+            if let Some(solution) = self.all_solutions.back() {
+                let inner_solution = &solution.scored_solution.solution;
+                if solution.iteration + self.all_solution_iteration_expiry >= self.iteration_count {
+                    self.all_solutions_lookup.remove(inner_solution);
+                    self.all_solutions.pop_back();
+                    continue;
+                }
+                self.all_solutions_lookup.remove(inner_solution);
+                break;
+            }
+            break;
+        }
+    }
+
+    pub fn is_solution_tabu(&self, solution: &_Solution) -> bool {
+        self.all_solutions_lookup.contains(solution)
+    }
+
+    pub fn is_best_solution(&self, solution: &ScoredSolution<_Solution, _Score>) -> bool {
+        self.best_solutions.contains(solution)
+    }
+
+    pub fn local_search_chose_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+        if self.best_solutions.len() < self.best_solutions_capacity {
+            self.best_solutions.insert(solution.clone());
+            return;
+        }
+
+        // TODO better heuristic for creating a diverse best solution set even if the candidate solution has a worse
+        // score.
+        let worst_solution = self.best_solutions.iter().next_back().unwrap().clone();
+        if solution.score < worst_solution.score {
+            self.best_solutions.remove(&worst_solution);
+            self.best_solutions.insert(solution.clone());
+        }
+    }
+
+    pub fn get_random_best_solution(&self, rng: &mut _R) -> Option<ScoredSolution<_Solution, _Score>> {
+        if self.best_solutions.is_empty() {
+            return None;
+        }
+        let best_solutions_vec: Vec<ScoredSolution<_Solution, _Score>> =
+            self.best_solutions.iter().cloned().collect();
+        let random_best_solution = best_solutions_vec.choose(rng).unwrap().clone();
+        Some(random_best_solution)
+    }
+
+    pub fn get_best_multiple(&self, number_to_get: usize) -> Option<Vec<ScoredSolution<_Solution, _Score>>> {
+        if self.best_solutions.is_empty() {
+            return None;
+        }
+        let result = self.best_solutions.iter().take(number_to_get).cloned().collect();
+        Some(result)
+    }
+
+    pub fn get_best(&self) -> Option<ScoredSolution<_Solution, _Score>> {
+        if self.best_solutions.is_empty() {
+            return None;
+        }
+        Some(self.best_solutions.iter().next().unwrap().clone())
+    }
+
+    pub fn clear(&mut self) {
+        self.all_solutions.clear();
+        self.all_solutions_lookup.clear();
+        self.best_solutions.clear();
+    }
+}
+
 /// LocalSearch lets you find local minima for an optimization problem.
 pub struct LocalSearch<R, _Solution, _Score, SSC, MP>
 where
@@ -92,6 +257,8 @@ where
     move_proposer: MP,
     solution_score_calculator: SSC,
     max_iterations: u64,
+    window_size: usize,
+    history: History<R, _Solution, _Score>,
     rng: R,
 }
 
@@ -103,36 +270,61 @@ where
     SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
     MP: MoveProposer<R = R, Solution = _Solution>,
 {
-    pub fn new(move_proposer: MP, solution_score_calculator: SSC, max_iterations: u64, rng: R) -> Self {
+    pub fn new(
+        move_proposer: MP,
+        solution_score_calculator: SSC,
+        max_iterations: u64,
+        window_size: usize,
+        best_solutions_capacity: usize,
+        all_solutions_capacity: usize,
+        all_solution_iteration_expiry: u64,
+        rng: R,
+    ) -> Self {
         LocalSearch {
             move_proposer,
             solution_score_calculator,
             max_iterations,
+            window_size,
+            history: History::new(best_solutions_capacity, all_solutions_capacity, all_solution_iteration_expiry),
             rng,
         }
     }
 
     pub fn execute(&mut self, start: _Solution) -> ScoredSolution<_Solution, _Score> {
-        let mut current_solution = start;
+        let mut current_solution =
+            ScoredSolution::new(start.clone(), self.solution_score_calculator.get_score(&start));
         for _current_iteration in 0..self.max_iterations {
-            match self
+            self.history.seen_solution(&current_solution);
+            if current_solution.score.is_best() {
+                println!("local search found best possible solution and is terminating");
+                return current_solution;
+            }
+            let mut neighborhood: Vec<ScoredSolution<_Solution, _Score>> = self
                 .move_proposer
-                .iter_local_moves(&current_solution, &mut self.rng)
+                .iter_local_moves(&current_solution.solution, &mut self.rng)
                 .into_iter()
-                .filter(|proposed_solution| {
-                    self.solution_score_calculator.get_score(proposed_solution)
-                        < self.solution_score_calculator.get_score(&current_solution)
+                .filter(|solution| !self.history.is_solution_tabu(solution))
+                .map(|solution| {
+                    ScoredSolution::new(
+                        solution.clone(),
+                        self.solution_score_calculator.get_score(&solution),
+                    )
                 })
-                .next()
-            {
-                Some(new_solution) => current_solution = new_solution,
-                None => break,
+                .take(self.window_size)
+                .filter(|proposed_solution| proposed_solution < &current_solution)
+                .collect();
+            neighborhood.sort();
+            if let Some(neighborhood_best) = neighborhood.first() {
+                if neighborhood_best < &current_solution {
+                    current_solution = neighborhood_best.clone();
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
         }
-        ScoredSolution::new(
-            current_solution.clone(),
-            self.solution_score_calculator.get_score(&current_solution),
-        )
+        current_solution
     }
 }
 
@@ -162,6 +354,10 @@ mod ackley_tests {
         let max_move_size = 0.1;
         let max_iterations = 100_000;
         let seed = 42;
+        let window_size = 256;
+        let best_solutions_capacity = 16;
+        let all_solutions_capacity = 10_000;
+        let all_solution_iteration_expiry = 10_000;
         let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let initial_solution_generator = AckleyInitialSolutionGenerator::new(dimensions);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
@@ -177,6 +373,10 @@ mod ackley_tests {
             move_proposer,
             solution_score_calculator,
             max_iterations,
+            window_size,
+            best_solutions_capacity,
+            all_solutions_capacity,
+            all_solution_iteration_expiry,
             solver_rng,
         );
 
@@ -209,6 +409,10 @@ mod ackley_tests {
         let min_move_size = 1e-6;
         let max_move_size = 0.1;
         let max_iterations = 100_000;
+        let window_size = 256;
+        let best_solutions_capacity = 16;
+        let all_solutions_capacity = 10_000;
+        let all_solution_iteration_expiry = 10_000;
         let seed = 42;
         let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
@@ -224,6 +428,10 @@ mod ackley_tests {
             move_proposer,
             solution_score_calculator,
             max_iterations,
+            window_size,
+            best_solutions_capacity,
+            all_solutions_capacity,
+            all_solution_iteration_expiry,
             solver_rng,
         );
 

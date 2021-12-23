@@ -3,9 +3,9 @@
 /// [1] Lourenço, Helena Ramalhinho, Olivier C. Martin and Thomas Stützle. "Iterated Local Search: Framework and
 /// Applications." (2010).
 use rand::prelude::SliceRandom;
-use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
+use crate::local_search::History;
 use crate::local_search::InitialSolutionGenerator;
 use crate::local_search::LocalSearch;
 use crate::local_search::MoveProposer;
@@ -63,93 +63,6 @@ where
             None => vec![existing_local_minima, new_local_minima],
         };
         choices.choose(rng).unwrap().clone()
-    }
-}
-
-/// History keeps track of the local minima that LocalSearch finds. You can then ask History for the best solutions
-/// it's seen so far.
-pub struct History<_R, _Solution, _Score>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-{
-    best_solutions: BTreeSet<ScoredSolution<_Solution, _Score>>,
-    best_solutions_capacity: usize,
-    pub iteration_count: u64,
-    phantom_r: PhantomData<_R>,
-}
-
-impl<_R, _Solution, _Score> Default for History<_R, _Solution, _Score>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-{
-    fn default() -> Self {
-        Self::new(16, 0)
-    }
-}
-
-impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-{
-    pub fn new(best_solutions_capacity: usize, iteration_count: u64) -> Self {
-        History {
-            best_solutions: Default::default(),
-            best_solutions_capacity,
-            iteration_count,
-            phantom_r: PhantomData,
-        }
-    }
-
-    fn local_search_chose_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
-        self.iteration_count += 1;
-
-        if self.best_solutions.len() < self.best_solutions_capacity {
-            self.best_solutions.insert(solution.clone());
-            return;
-        }
-
-        // TODO better heuristic for creating a diverse best solution set even if the candidate solution has a worse
-        // score.
-        let worst_solution = self.best_solutions.iter().next_back().unwrap().clone();
-        if solution.score < worst_solution.score {
-            self.best_solutions.remove(&worst_solution);
-            self.best_solutions.insert(solution.clone());
-        }
-    }
-
-    pub fn get_random_best_solution(&self, rng: &mut _R) -> Option<ScoredSolution<_Solution, _Score>> {
-        if self.best_solutions.is_empty() {
-            return None;
-        }
-        let best_solutions_vec: Vec<ScoredSolution<_Solution, _Score>> =
-            self.best_solutions.iter().cloned().collect();
-        let random_best_solution = best_solutions_vec.choose(rng).unwrap().clone();
-        Some(random_best_solution)
-    }
-
-    pub fn get_best_multiple(&self, number_to_get: usize) -> Option<Vec<ScoredSolution<_Solution, _Score>>> {
-        if self.best_solutions.is_empty() {
-            return None;
-        }
-        let result = self.best_solutions.iter().take(number_to_get).cloned().collect();
-        Some(result)
-    }
-
-    pub fn get_best(&self) -> Option<ScoredSolution<_Solution, _Score>> {
-        if self.best_solutions.is_empty() {
-            return None;
-        }
-        Some(self.best_solutions.iter().next().unwrap().clone())
-    }
-
-    pub fn _clear(&mut self) {
-        self.best_solutions.clear();
     }
 }
 
@@ -225,9 +138,11 @@ where
             .generate_initial_solution(&mut self.rng);
         let mut current = self.local_search.execute(initial);
         for i in 0..self.max_iterations {
-            // if i % 10_000 == 0 {
-            //     println!("iterated local search current: {:?}", &current);
-            // }
+            if current.score.is_best() {
+                println!("iterated local search found best possible solution and is terminating");
+                return current;
+            }
+            println!("iterated local search current score: {:?}", &current.score);
             self.history.local_search_chose_solution(&current);
             let perturbed =
                 self.perturbation
@@ -260,6 +175,10 @@ mod ackley_tests {
         let min_move_size = 1e-3;
         let max_move_size = 0.1;
         let local_search_max_iterations = 100_000;
+        let window_size = 5;
+        let best_solutions_capacity = 16;
+        let all_solutions_capacity = 10_000;
+        let all_solution_iteration_expiry = 10_000;        
         let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
@@ -273,6 +192,10 @@ mod ackley_tests {
             move_proposer,
             solution_score_calculator,
             local_search_max_iterations,
+            window_size,
+            best_solutions_capacity,
+            all_solutions_capacity,
+            all_solution_iteration_expiry,
             solver_rng,
         );
 
@@ -308,21 +231,39 @@ mod ackley_tests {
         let dimensions = 2;
         for seed in 0..10 {
             let solution = _ackley(dimensions, seed);
-            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            println!(
+                "iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}",
+                seed,
+                dimensions,
+                solution.score.get_score(),
+                solution
+            );
             assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
 
         let dimensions = 10;
         for seed in 0..1 {
             let solution = _ackley(dimensions, seed);
-            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            println!(
+                "iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}",
+                seed,
+                dimensions,
+                solution.score.get_score(),
+                solution
+            );
             assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
 
         let dimensions = 20;
         for seed in 0..1 {
             let solution = _ackley(dimensions, seed);
-            // println!("iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}", seed, dimensions, solution.score.get_score(), solution);
+            println!(
+                "iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}",
+                seed,
+                dimensions,
+                solution.score.get_score(),
+                solution
+            );
             assert_abs_diff_eq!(0.0, solution.score.get_score(), epsilon = 1e-2);
         }
     }
