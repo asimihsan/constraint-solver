@@ -156,7 +156,7 @@ where
 
     pub fn seen_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
         self.iteration_count += 1;
-        self._pop_solution();
+        self._pop_solution_for_age();
         if self.all_solutions_lookup.contains(&solution.solution) {
             return;
         }
@@ -164,9 +164,7 @@ where
     }
 
     fn _add_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
-        while self.all_solutions.len() > self.all_solutions_capacity {
-            self._pop_solution();
-        }
+        self._pop_solution_for_size();
         self.all_solutions.push_front(ScoredSolutionAndIterationAdded {
             scored_solution: solution.clone(),
             iteration: self.iteration_count,
@@ -174,7 +172,16 @@ where
         self.all_solutions_lookup.insert(solution.solution.clone());
     }
 
-    fn _pop_solution(&mut self) {
+    fn _pop_solution_for_size(&mut self) {
+        while self.all_solutions.len() > self.all_solutions_capacity {
+            if let Some(solution) = self.all_solutions.pop_back() {
+                self.all_solutions_lookup
+                    .remove(&solution.scored_solution.solution);
+            }
+        }
+    }
+
+    fn _pop_solution_for_age(&mut self) {
         loop {
             if let Some(solution) = self.all_solutions.back() {
                 let inner_solution = &solution.scored_solution.solution;
@@ -183,7 +190,6 @@ where
                     self.all_solutions.pop_back();
                     continue;
                 }
-                self.all_solutions_lookup.remove(inner_solution);
                 break;
             }
             break;
@@ -285,7 +291,11 @@ where
             solution_score_calculator,
             max_iterations,
             window_size,
-            history: History::new(best_solutions_capacity, all_solutions_capacity, all_solution_iteration_expiry),
+            history: History::new(
+                best_solutions_capacity,
+                all_solutions_capacity,
+                all_solution_iteration_expiry,
+            ),
             rng,
         }
     }
@@ -293,7 +303,9 @@ where
     pub fn execute(&mut self, start: _Solution) -> ScoredSolution<_Solution, _Score> {
         let mut current_solution =
             ScoredSolution::new(start.clone(), self.solution_score_calculator.get_score(&start));
-        for _current_iteration in 0..self.max_iterations {
+        let mut best_solution = current_solution.clone();
+        let accept_all_until = self.rng.gen_range(0..=self.max_iterations);
+        for _current_iteration in 0..=self.max_iterations {
             self.history.seen_solution(&current_solution);
             if current_solution.score.is_best() {
                 println!("local search found best possible solution and is terminating");
@@ -311,20 +323,20 @@ where
                     )
                 })
                 .take(self.window_size)
-                .filter(|proposed_solution| proposed_solution < &current_solution)
                 .collect();
-            neighborhood.sort();
+            neighborhood.sort_unstable();
             if let Some(neighborhood_best) = neighborhood.first() {
                 if neighborhood_best < &current_solution {
-                    current_solution = neighborhood_best.clone();
-                } else {
+                    best_solution = neighborhood_best.clone();
+                } else if _current_iteration >= accept_all_until {
                     break;
                 }
+                current_solution = neighborhood_best.clone();
             } else {
                 break;
             }
         }
-        current_solution
+        best_solution
     }
 }
 

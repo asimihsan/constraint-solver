@@ -55,14 +55,18 @@ where
         history: &History<_R, _Solution, _Score>,
         rng: &mut _R,
     ) -> ScoredSolution<_Solution, _Score> {
-        if new_local_minima.score < existing_local_minima.score {
-            return new_local_minima;
-        }
+        // if new_local_minima.score < existing_local_minima.score {
+        //     return new_local_minima;
+        // }
         let choices = match history.get_random_best_solution(rng) {
-            Some(random_best_solution) => vec![existing_local_minima, new_local_minima, random_best_solution],
-            None => vec![existing_local_minima, new_local_minima],
+            Some(random_best_solution) => vec![
+                (existing_local_minima, 1),
+                (new_local_minima, 5),
+                (random_best_solution, 1),
+            ],
+            None => vec![(existing_local_minima, 1), (new_local_minima, 5)],
         };
-        choices.choose(rng).unwrap().clone()
+        choices.choose_weighted(rng, |item| item.1).unwrap().0.clone()
     }
 }
 
@@ -142,7 +146,14 @@ where
                 println!("iterated local search found best possible solution and is terminating");
                 return current;
             }
-            println!("iterated local search current score: {:?}", &current.score);
+            if i % 100 == 0 {
+                // println!("reset from random");
+                current = self.local_search.execute(
+                    self.initial_solution_generator
+                        .generate_initial_solution(&mut self.rng),
+                );
+            }
+            // println!("iterated local search current score: {:?}", &current.score);
             self.history.local_search_chose_solution(&current);
             let perturbed =
                 self.perturbation
@@ -175,10 +186,10 @@ mod ackley_tests {
         let min_move_size = 1e-3;
         let max_move_size = 0.1;
         let local_search_max_iterations = 100_000;
-        let window_size = 5;
+        let window_size = 500;
         let best_solutions_capacity = 16;
         let all_solutions_capacity = 10_000;
-        let all_solution_iteration_expiry = 10_000;        
+        let all_solution_iteration_expiry = 10_000;
         let move_proposer = AckleyMoveProposer::new(dimensions, min_move_size, max_move_size);
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let solver_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
@@ -204,7 +215,7 @@ mod ackley_tests {
         let history = History::<rand_chacha::ChaCha20Rng, AckleySolution, AckleyScore>::default();
         let acceptance_criterion = AcceptanceCriterion::default();
         let iterated_local_search_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
-        let iterated_local_search_max_iterations = 10_000;
+        let iterated_local_search_max_iterations = 5_000;
         let mut iterated_local_search: IteratedLocalSearch<
             rand_chacha::ChaCha20Rng,
             AckleySolution,
@@ -229,7 +240,7 @@ mod ackley_tests {
     #[test]
     fn ackley() {
         let dimensions = 2;
-        for seed in 0..10 {
+        for seed in 0..1 {
             let solution = _ackley(dimensions, seed);
             println!(
                 "iterated local search ackley seed {} dimensions {} solution score {:.2}: {:?}",

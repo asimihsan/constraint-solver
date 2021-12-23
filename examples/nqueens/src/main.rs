@@ -51,7 +51,7 @@ fn main() {
     let board_size = matches.value_of("board_size").unwrap().parse::<u64>().unwrap();
 
     let local_search_max_iterations = 10_000;
-    let window_size = board_size * 10;
+    let window_size = board_size * 5;
     let best_solutions_capacity = 32;
     let all_solutions_capacity = 100_000;
     let all_solution_iteration_expiry = 1_000;
