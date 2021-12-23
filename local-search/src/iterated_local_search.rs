@@ -147,13 +147,15 @@ where
                 return current;
             }
             if i % 100 == 0 {
+                if let Some(best) = self.history.get_best() {
+                    println!("iterated local search best score: {:?}", &best.score);
+                }
                 // println!("reset from random");
                 current = self.local_search.execute(
                     self.initial_solution_generator
                         .generate_initial_solution(&mut self.rng),
                 );
             }
-            // println!("iterated local search current score: {:?}", &current.score);
             self.history.local_search_chose_solution(&current);
             let perturbed =
                 self.perturbation
@@ -215,7 +217,7 @@ mod ackley_tests {
         let history = History::<rand_chacha::ChaCha20Rng, AckleySolution, AckleyScore>::default();
         let acceptance_criterion = AcceptanceCriterion::default();
         let iterated_local_search_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
-        let iterated_local_search_max_iterations = 5_000;
+        let iterated_local_search_max_iterations = 10_000;
         let mut iterated_local_search: IteratedLocalSearch<
             rand_chacha::ChaCha20Rng,
             AckleySolution,

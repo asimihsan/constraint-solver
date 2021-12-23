@@ -304,7 +304,8 @@ where
         let mut current_solution =
             ScoredSolution::new(start.clone(), self.solution_score_calculator.get_score(&start));
         let mut best_solution = current_solution.clone();
-        let accept_all_until = self.rng.gen_range(0..=self.max_iterations);
+        let allow_no_improvement_for = 1;
+        let mut no_improvement_for = 0;
         for _current_iteration in 0..=self.max_iterations {
             self.history.seen_solution(&current_solution);
             if current_solution.score.is_best() {
@@ -328,8 +329,12 @@ where
             if let Some(neighborhood_best) = neighborhood.first() {
                 if neighborhood_best < &current_solution {
                     best_solution = neighborhood_best.clone();
-                } else if _current_iteration >= accept_all_until {
-                    break;
+                    no_improvement_for = 0;
+                } else {
+                    no_improvement_for += 1;
+                    if no_improvement_for >= allow_no_improvement_for {
+                        break;
+                    }
                 }
                 current_solution = neighborhood_best.clone();
             } else {
