@@ -102,6 +102,7 @@ where
     history: History<_R, _Solution, _Score>,
     acceptance_criterion: AcceptanceCriterion<_R, _Solution, _Score, _SSC>,
     max_iterations: u64,
+    max_allow_no_improvement_for: u64,
     rng: _R,
 }
 
@@ -123,6 +124,7 @@ where
         history: History<_R, _Solution, _Score>,
         acceptance_criterion: AcceptanceCriterion<_R, _Solution, _Score, _SSC>,
         max_iterations: u64,
+        max_allow_no_improvement_for: u64,
         rng: _R,
     ) -> Self {
         IteratedLocalSearch {
@@ -132,35 +134,48 @@ where
             history,
             acceptance_criterion,
             max_iterations,
+            max_allow_no_improvement_for,
             rng,
         }
     }
 
     pub fn execute(&mut self) -> ScoredSolution<_Solution, _Score> {
+        let mut allow_no_improvement_for = 0;
         let initial = self
             .initial_solution_generator
             .generate_initial_solution(&mut self.rng);
-        let mut current = self.local_search.execute(initial);
+        let mut current = self.local_search.execute(initial, allow_no_improvement_for);
+        self.history.local_search_chose_solution(&current);
         for i in 0..self.max_iterations {
             if current.score.is_best() {
                 println!("iterated local search found best possible solution and is terminating");
                 return current;
             }
-            if i % 100 == 0 {
-                if let Some(best) = self.history.get_best() {
-                    println!("iterated local search best score: {:?}", &best.score);
-                }
-                // println!("reset from random");
+            if let Some(best) = self.history.get_best() {
+                println!("iterated local search best score: {:?}", &best.score);
+            }
+            if i > 0 && i % 100 == 0 {
+                println!("reset from random");
                 current = self.local_search.execute(
                     self.initial_solution_generator
                         .generate_initial_solution(&mut self.rng),
+                    0,
                 );
             }
-            self.history.local_search_chose_solution(&current);
+            if let Some(best) = self.history.get_best() {
+                if current < best {
+                    allow_no_improvement_for =
+                        (allow_no_improvement_for - 1).clamp(0, self.max_allow_no_improvement_for);
+                } else {
+                    allow_no_improvement_for =
+                        (allow_no_improvement_for + 1).clamp(0, self.max_allow_no_improvement_for);
+                }
+            }
             let perturbed =
                 self.perturbation
                     .propose_new_starting_solution(&current, &self.history, &mut self.rng);
-            let new = self.local_search.execute(perturbed);
+            let new = self.local_search.execute(perturbed, allow_no_improvement_for);
+            self.history.local_search_chose_solution(&new);
             current = self
                 .acceptance_criterion
                 .choose(current, new, &self.history, &mut self.rng);
@@ -218,6 +233,7 @@ mod ackley_tests {
         let acceptance_criterion = AcceptanceCriterion::default();
         let iterated_local_search_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
         let iterated_local_search_max_iterations = 10_000;
+        let max_allow_no_improvement_for = 5;
         let mut iterated_local_search: IteratedLocalSearch<
             rand_chacha::ChaCha20Rng,
             AckleySolution,
@@ -233,6 +249,7 @@ mod ackley_tests {
             history,
             acceptance_criterion,
             iterated_local_search_max_iterations,
+            max_allow_no_improvement_for,
             iterated_local_search_rng,
         );
 

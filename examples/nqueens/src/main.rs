@@ -85,6 +85,7 @@ fn main() {
     let acceptance_criterion = AcceptanceCriterion::default();
     let iterated_local_search_rng = rand_chacha::ChaCha20Rng::from_seed(seed.into());
     let iterated_local_search_max_iterations = 10_000;
+    let max_allow_no_improvement_for = 5;
     let mut iterated_local_search: IteratedLocalSearch<
         rand_chacha::ChaCha20Rng,
         NQueensSolution,
@@ -100,6 +101,7 @@ fn main() {
         history,
         acceptance_criterion,
         iterated_local_search_max_iterations,
+        max_allow_no_improvement_for,
         iterated_local_search_rng,
     );
 

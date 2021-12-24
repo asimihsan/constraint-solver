@@ -300,11 +300,10 @@ where
         }
     }
 
-    pub fn execute(&mut self, start: _Solution) -> ScoredSolution<_Solution, _Score> {
+    pub fn execute(&mut self, start: _Solution, allow_no_improvement_for: u64) -> ScoredSolution<_Solution, _Score> {
         let mut current_solution =
             ScoredSolution::new(start.clone(), self.solution_score_calculator.get_score(&start));
         let mut best_solution = current_solution.clone();
-        let allow_no_improvement_for = 1;
         let mut no_improvement_for = 0;
         for _current_iteration in 0..=self.max_iterations {
             self.history.seen_solution(&current_solution);
@@ -400,7 +399,8 @@ mod ackley_tests {
         let mut initial_solution_rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
         let start = initial_solution_generator.generate_initial_solution(&mut initial_solution_rng);
         println!("start: {:?}", start);
-        let end = local_search.execute(start.clone());
+        let allow_no_improvement_for = 1;
+        let end = local_search.execute(start.clone(), allow_no_improvement_for);
 
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let start_score = solution_score_calculator.get_score(&start);
@@ -454,7 +454,8 @@ mod ackley_tests {
 
         let start = AckleySolution::new((0..dimensions).map(|_| FloatOrd(0.0)).collect());
         println!("start: {:?}", start);
-        let end = local_search.execute(start.clone());
+        let allow_no_improvement_for = 1;
+        let end = local_search.execute(start.clone(), allow_no_improvement_for);
 
         let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let start_score = solution_score_calculator.get_score(&start);
