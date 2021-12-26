@@ -201,7 +201,7 @@ mod ackley_tests {
 
     fn _ackley(dimensions: usize, seed: u64) -> ScoredSolution<AckleySolution, AckleyScore> {
         let min_move_size = 1e-3;
-        let max_move_size = 0.1;
+        let max_move_size = 0.5;
         let local_search_max_iterations = 100_000;
         let window_size = 500;
         let best_solutions_capacity = 16;

@@ -300,7 +300,11 @@ where
         }
     }
 
-    pub fn execute(&mut self, start: _Solution, allow_no_improvement_for: u64) -> ScoredSolution<_Solution, _Score> {
+    pub fn execute(
+        &mut self,
+        start: _Solution,
+        allow_no_improvement_for: u64,
+    ) -> ScoredSolution<_Solution, _Score> {
         let mut current_solution =
             ScoredSolution::new(start.clone(), self.solution_score_calculator.get_score(&start));
         let mut best_solution = current_solution.clone();

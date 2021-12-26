@@ -1,9 +1,12 @@
 #[macro_use]
 extern crate derivative;
 
+#[macro_use]
+extern crate approx;
+
 mod ackley;
-pub mod local_search;
 pub mod iterated_local_search;
+pub mod local_search;
 
 // use std::{fmt::Debug, marker::PhantomData};
 
@@ -46,8 +49,6 @@ pub mod iterated_local_search;
 
 //     fn local_search(&self, start: &Self::S) -> Self::S;
 // }
-
-
 
 // #[derive(Clone, Debug, Eq, PartialEq)]
 // pub enum LocalSearchStrategy {
