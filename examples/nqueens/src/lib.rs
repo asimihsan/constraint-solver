@@ -5,19 +5,18 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 use local_search::iterated_local_search::Perturbation;
-use local_search::local_search::{
-    InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator,
-};
+use local_search::local_search::{InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
 // In the n-queens problem the column for a decision variable is fixed because we know all queens must be
 // on distinct columns.  So e.g. for a 8 x 8 board, rows[0] contains the row for the queen in the 1st
 // column, rows[2] contains the row for the queen in the 2nd column, etc.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NQueensSolution {
     rows: Vec<u64>,
 }
+
 impl Solution for NQueensSolution {}
 
 // Print out solutions, useful for small solutions, nice-to-have.
@@ -59,7 +58,8 @@ impl std::fmt::Debug for NQueensSolution {
 
 // The number of conflicts, i.e. number of queens attacking each other. Want this to reach zero.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct NQueensScore(u64);
+pub struct NQueensScore(pub u64);
+
 impl Score for NQueensScore {
     /// If there are no conflicts, i.e. a score of zero, this is the best score.
     fn is_best(&self) -> bool {
@@ -67,18 +67,16 @@ impl Score for NQueensScore {
     }
 }
 
-fn get_col_scores(solution: &NQueensSolution) -> HashMap<usize, u64> {
-    let mut result = HashMap::with_capacity(solution.rows.len());
-    for col in 0..solution.rows.len() {
-        result.insert(col, 0);
-    }
+/// Get conflict per column.
+fn get_col_scores(solution: &NQueensSolution) -> Vec<u64> {
+    let mut result = vec![0; solution.rows.len()];
     for (col1, row1) in solution.rows.iter().enumerate() {
         for (col2, row2) in solution.rows.iter().enumerate().skip(col1 + 1) {
             let row_diff = *row2 as i64 - *row1 as i64;
             let column_diff = col2 as i64 - col1 as i64;
             if row_diff == 0 || row_diff.abs() == column_diff.abs() {
-                *result.entry(col1).or_insert(0) += 1;
-                *result.entry(col2).or_insert(0) += 1;
+                result[col1] += 1;
+                result[col2] += 1;
             }
         }
     }
@@ -126,9 +124,9 @@ impl SolutionScoreCalculator for NQueensSolutionScoreCalculator {
     type _Solution = NQueensSolution;
     type _Score = NQueensScore;
 
-    fn get_score(&self, solution: &Self::_Solution) -> Self::_Score {
-        let row_scores = get_col_scores(solution);
-        NQueensScore(row_scores.values().sum())
+    fn get_scored_solution(&self, solution: Self::_Solution) -> ScoredSolution<Self::_Solution, Self::_Score> {
+        let row_scores = get_col_scores(&solution);
+        ScoredSolution { score: NQueensScore(row_scores.iter().sum()), solution }
     }
 }
 
@@ -171,26 +169,30 @@ impl MoveProposer for NQueensMoveProposer {
         &self,
         start: &Self::Solution,
         rng: &mut Self::R,
-    ) -> Box<dyn Iterator<Item = Self::Solution>> {
+    ) -> Box<dyn Iterator<Item=Self::Solution>> {
         let mut cols_with_conflicts: Vec<(usize, u64)> = get_col_scores(start)
             .into_iter()
+            .enumerate()
             .filter(|(_row, score)| *score != 0)
             .collect();
-        cols_with_conflicts.shuffle(rng);
+        cols_with_conflicts.sort();
+        // println!("cols_with_conflicts before: {:?}", cols_with_conflicts);
+        // cols_with_conflicts.shuffle(rng);
+        // println!("cols_with_conflicts after: {:?}", cols_with_conflicts);
         // println!("start: {:?}", start);
         // println!("cols_with_conflicts: {:?}", cols_with_conflicts);
         let random_cols = if cols_with_conflicts.is_empty() {
             None
         } else {
-            // let amount = (start.rows.len() / 20).clamp(1, cols_with_conflicts.len());
-            // let cols: Vec<usize> = cols_with_conflicts
-            //     .choose_multiple_weighted(rng, amount, |(_col, score)| *score as f64)
-            //     .unwrap()
-            //     .map(|(col, _score)| *col)
-            //     .collect();
-            // let num_cols = rng.gen_range(1..=cols.len());
-            // let cols = cols.choose_multiple(rng, num_cols).map(|col| *col).collect();
-            Some(cols_with_conflicts.iter().map(|(col, _score)| *col).collect())
+            let amount = (start.rows.len() / 20).clamp(1, cols_with_conflicts.len());
+            let cols: Vec<usize> = cols_with_conflicts
+                .choose_multiple_weighted(rng, amount, |(_col, score)| *score as f64 + 1e-4 as f64)
+                .unwrap()
+                .map(|(col, _score)| *col)
+                .collect();
+            let num_cols = rng.gen_range(1..=cols.len());
+            Some(cols.choose_multiple(rng, num_cols).map(|col| *col).collect())
+            // Some(cols_with_conflicts.iter().map(|(col, _score)| *col).collect())
         };
         struct MoveIterator {
             board_size: u64,

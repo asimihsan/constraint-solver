@@ -16,15 +16,14 @@ use crate::local_search::SolutionScoreCalculator;
 
 /// AcceptanceCriterion takes the old local minima and new local minima, combines it with the history, and determines
 /// which one to use.
-
 #[derive(Derivative)]
 #[derivative(Default)]
 pub struct AcceptanceCriterion<_R, _Solution, _Score, _SSC>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-    _SSC: SolutionScoreCalculator,
+    where
+        _R: rand::Rng,
+        _Solution: Solution,
+        _Score: Score,
+        _SSC: SolutionScoreCalculator,
 {
     phantom_r: PhantomData<_R>,
     phantom_solution: PhantomData<_Solution>,
@@ -33,11 +32,11 @@ where
 }
 
 impl<_R, _Solution, _Score, _SSC> AcceptanceCriterion<_R, _Solution, _Score, _SSC>
-where
-    _R: rand::Rng,
-    _Solution: Solution,
-    _Score: Score,
-    _SSC: SolutionScoreCalculator,
+    where
+        _R: rand::Rng,
+        _Solution: Solution,
+        _Score: Score,
+        _SSC: SolutionScoreCalculator,
 {
     pub fn new() -> Self {
         Self {
@@ -76,7 +75,7 @@ pub trait Perturbation {
     type _R: rand::Rng;
     type _Solution: Solution;
     type _Score: Score;
-    type _SSC: SolutionScoreCalculator<_Solution = Self::_Solution, _Score = Self::_Score>;
+    type _SSC: SolutionScoreCalculator<_Solution=Self::_Solution, _Score=Self::_Score>;
 
     fn propose_new_starting_solution(
         &mut self,
@@ -87,16 +86,17 @@ pub trait Perturbation {
 }
 
 pub struct IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-where
-    _R: rand::Rng,
-    _Score: Score,
-    _Solution: Solution,
-    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
-    _MP: MoveProposer<R = _R, Solution = _Solution>,
-    _ISG: InitialSolutionGenerator,
-    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
+    where
+        _R: rand::Rng,
+        _Score: Score,
+        _Solution: Solution,
+        _SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
+        _MP: MoveProposer<R=_R, Solution=_Solution>,
+        _ISG: InitialSolutionGenerator,
+        _P: Perturbation<_R=_R, _Solution=_Solution, _Score=_Score, _SSC=_SSC>,
 {
     initial_solution_generator: _ISG,
+    solution_score_calculator: _SSC,
     local_search: LocalSearch<_R, _Solution, _Score, _SSC, _MP>,
     perturbation: _P,
     history: History<_R, _Solution, _Score>,
@@ -107,18 +107,19 @@ where
 }
 
 impl<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-    IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-where
-    _R: rand::Rng,
-    _Score: Score,
-    _Solution: Solution,
-    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
-    _MP: MoveProposer<R = _R, Solution = _Solution>,
-    _ISG: InitialSolutionGenerator<R = _R, Solution = _Solution>,
-    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
+IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
+    where
+        _R: rand::Rng,
+        _Score: Score,
+        _Solution: Solution,
+        _SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
+        _MP: MoveProposer<R=_R, Solution=_Solution>,
+        _ISG: InitialSolutionGenerator<R=_R, Solution=_Solution>,
+        _P: Perturbation<_R=_R, _Solution=_Solution, _Score=_Score, _SSC=_SSC>,
 {
     pub fn new(
         initial_solution_generator: _ISG,
+        solution_score_calculator: _SSC,
         local_search: LocalSearch<_R, _Solution, _Score, _SSC, _MP>,
         perturbation: _P,
         history: History<_R, _Solution, _Score>,
@@ -129,6 +130,7 @@ where
     ) -> Self {
         IteratedLocalSearch {
             initial_solution_generator,
+            solution_score_calculator,
             local_search,
             perturbation,
             history,
@@ -141,29 +143,25 @@ where
 
     pub fn execute(&mut self) -> ScoredSolution<_Solution, _Score> {
         let mut allow_no_improvement_for = 0;
-        let initial = self
+        let mut current = self.solution_score_calculator.get_scored_solution(self
             .initial_solution_generator
-            .generate_initial_solution(&mut self.rng);
-        let mut current = self.local_search.execute(initial, allow_no_improvement_for);
-        self.history.local_search_chose_solution(&current);
+            .generate_initial_solution(&mut self.rng));
         for i in 0..self.max_iterations {
-            if current.score.is_best() {
-                println!("iterated local search found best possible solution and is terminating");
-                return current;
-            }
             if let Some(best) = self.history.get_best() {
                 println!("iterated local search best score: {:?}", &best.score);
+                if best.score.is_best() {
+                    println!("iterated local search found best possible solution and is terminating");
+                    return best;
+                }
             }
             if i > 0 && i % 100 == 0 {
                 println!("reset from random");
-                current = self.local_search.execute(
-                    self.initial_solution_generator
-                        .generate_initial_solution(&mut self.rng),
-                    0,
-                );
+                current = self.solution_score_calculator.get_scored_solution(self
+                    .initial_solution_generator
+                    .generate_initial_solution(&mut self.rng));
             }
             if let Some(best) = self.history.get_best() {
-                if current < best {
+                if current.score < best.score {
                     allow_no_improvement_for =
                         (allow_no_improvement_for - 1).clamp(0, self.max_allow_no_improvement_for);
                 } else {
@@ -228,6 +226,7 @@ mod ackley_tests {
         );
 
         let initial_solution_generator = AckleyInitialSolutionGenerator::new(dimensions);
+        let solution_score_calculator = AckleySolutionScoreCalculator::default();
         let perturbation = AckleyPerturbation::default();
         let history = History::<rand_chacha::ChaCha20Rng, AckleySolution, AckleyScore>::default();
         let acceptance_criterion = AcceptanceCriterion::default();
@@ -244,6 +243,7 @@ mod ackley_tests {
             AckleyPerturbation,
         > = IteratedLocalSearch::new(
             initial_solution_generator,
+            solution_score_calculator,
             local_search,
             perturbation,
             history,

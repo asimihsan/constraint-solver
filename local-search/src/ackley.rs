@@ -14,9 +14,9 @@ use rand::{prelude::SliceRandom, Rng};
 use rand_distr::Distribution;
 
 use crate::iterated_local_search::Perturbation;
-use crate::local_search::{InitialSolutionGenerator, MoveProposer, Score, Solution, SolutionScoreCalculator};
+use crate::local_search::{InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator};
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AckleySolution {
     x: Vec<FloatOrd<f64>>,
 }
@@ -61,9 +61,9 @@ impl SolutionScoreCalculator for AckleySolutionScoreCalculator {
     type _Solution = AckleySolution;
     type _Score = AckleyScore;
 
-    fn get_score(&self, solution: &Self::_Solution) -> Self::_Score {
+    fn get_scored_solution(&self, solution: Self::_Solution) -> ScoredSolution<Self::_Solution, Self::_Score> {
         let score = self.ackley_function.calculate(&solution.x);
-        AckleyScore(FloatOrd(score))
+        ScoredSolution{ score: AckleyScore(FloatOrd(score)), solution }
     }
 }
 

@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "examples/diagram-box-only",
+    "examples/diagram",
     "examples/nqueens",
     "local-search",
     "math-util",
