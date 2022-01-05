@@ -19,11 +19,11 @@ use crate::local_search::SolutionScoreCalculator;
 #[derive(Derivative)]
 #[derivative(Default)]
 pub struct AcceptanceCriterion<_R, _Solution, _Score, _SSC>
-    where
-        _R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
-        _SSC: SolutionScoreCalculator,
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    _SSC: SolutionScoreCalculator,
 {
     phantom_r: PhantomData<_R>,
     phantom_solution: PhantomData<_Solution>,
@@ -32,11 +32,11 @@ pub struct AcceptanceCriterion<_R, _Solution, _Score, _SSC>
 }
 
 impl<_R, _Solution, _Score, _SSC> AcceptanceCriterion<_R, _Solution, _Score, _SSC>
-    where
-        _R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
-        _SSC: SolutionScoreCalculator,
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    _SSC: SolutionScoreCalculator,
 {
     pub fn new() -> Self {
         Self {
@@ -75,7 +75,7 @@ pub trait Perturbation {
     type _R: rand::Rng;
     type _Solution: Solution;
     type _Score: Score;
-    type _SSC: SolutionScoreCalculator<_Solution=Self::_Solution, _Score=Self::_Score>;
+    type _SSC: SolutionScoreCalculator<_Solution = Self::_Solution, _Score = Self::_Score>;
 
     fn propose_new_starting_solution(
         &mut self,
@@ -86,14 +86,14 @@ pub trait Perturbation {
 }
 
 pub struct IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-    where
-        _R: rand::Rng,
-        _Score: Score,
-        _Solution: Solution,
-        _SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
-        _MP: MoveProposer<R=_R, Solution=_Solution>,
-        _ISG: InitialSolutionGenerator,
-        _P: Perturbation<_R=_R, _Solution=_Solution, _Score=_Score, _SSC=_SSC>,
+where
+    _R: rand::Rng,
+    _Score: Score,
+    _Solution: Solution,
+    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
+    _MP: MoveProposer<R = _R, Solution = _Solution>,
+    _ISG: InitialSolutionGenerator,
+    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
 {
     initial_solution_generator: _ISG,
     solution_score_calculator: _SSC,
@@ -107,15 +107,15 @@ pub struct IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
 }
 
 impl<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
-    where
-        _R: rand::Rng,
-        _Score: Score,
-        _Solution: Solution,
-        _SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
-        _MP: MoveProposer<R=_R, Solution=_Solution>,
-        _ISG: InitialSolutionGenerator<R=_R, Solution=_Solution>,
-        _P: Perturbation<_R=_R, _Solution=_Solution, _Score=_Score, _SSC=_SSC>,
+    IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
+where
+    _R: rand::Rng,
+    _Score: Score,
+    _Solution: Solution,
+    _SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
+    _MP: MoveProposer<R = _R, Solution = _Solution>,
+    _ISG: InitialSolutionGenerator<R = _R, Solution = _Solution>,
+    _P: Perturbation<_R = _R, _Solution = _Solution, _Score = _Score, _SSC = _SSC>,
 {
     pub fn new(
         initial_solution_generator: _ISG,
@@ -143,12 +143,16 @@ IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
 
     pub fn execute(&mut self) -> ScoredSolution<_Solution, _Score> {
         let mut allow_no_improvement_for = 0;
-        let mut current = self.solution_score_calculator.get_scored_solution(self
-            .initial_solution_generator
-            .generate_initial_solution(&mut self.rng));
+        let mut current = self.solution_score_calculator.get_scored_solution(
+            self.initial_solution_generator
+                .generate_initial_solution(&mut self.rng),
+        );
         for i in 0..self.max_iterations {
             if let Some(best) = self.history.get_best() {
-                println!("iterated local search best score: {:?}", &best.score);
+                println!(
+                    "iterated local search best score: {:?}, current score {:?}",
+                    &best.score, &current.score
+                );
                 if best.score.is_best() {
                     println!("iterated local search found best possible solution and is terminating");
                     return best;
@@ -156,9 +160,10 @@ IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
             }
             if i > 0 && i % 100 == 0 {
                 println!("reset from random");
-                current = self.solution_score_calculator.get_scored_solution(self
-                    .initial_solution_generator
-                    .generate_initial_solution(&mut self.rng));
+                current = self.solution_score_calculator.get_scored_solution(
+                    self.initial_solution_generator
+                        .generate_initial_solution(&mut self.rng),
+                );
             }
             if let Some(best) = self.history.get_best() {
                 if current.score < best.score {
@@ -173,7 +178,7 @@ IteratedLocalSearch<_R, _Solution, _Score, _SSC, _MP, _ISG, _P>
                 self.perturbation
                     .propose_new_starting_solution(&current, &self.history, &mut self.rng);
             let new = self.local_search.execute(perturbed, allow_no_improvement_for);
-            self.history.local_search_chose_solution(&new);
+            self.history.local_search_chose_solution(new.clone());
             current = self
                 .acceptance_criterion
                 .choose(current, new, &self.history, &mut self.rng);

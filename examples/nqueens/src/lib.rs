@@ -1,20 +1,23 @@
 #[macro_use]
 extern crate derivative;
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 
 use local_search::iterated_local_search::Perturbation;
-use local_search::local_search::{InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator};
+use local_search::local_search::{
+    InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator,
+};
 use rand::prelude::SliceRandom;
 use rand::Rng;
+
+type Integer = i64;
 
 // In the n-queens problem the column for a decision variable is fixed because we know all queens must be
 // on distinct columns.  So e.g. for a 8 x 8 board, rows[0] contains the row for the queen in the 1st
 // column, rows[2] contains the row for the queen in the 2nd column, etc.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NQueensSolution {
-    rows: Vec<u64>,
+    rows: Vec<Integer>,
 }
 
 impl Solution for NQueensSolution {}
@@ -23,11 +26,11 @@ impl Solution for NQueensSolution {}
 impl std::fmt::Debug for NQueensSolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let board_size = self.rows.len();
-        let lookup: HashSet<(u64, u64)> = self
+        let lookup: HashSet<(Integer, Integer)> = self
             .rows
             .iter()
             .enumerate()
-            .map(|(col, v)| (*v, col as u64))
+            .map(|(col, v)| (*v, col as Integer))
             .collect();
         let mut output = String::new();
         for row in 0..(board_size * 2) + 1 {
@@ -39,7 +42,7 @@ impl std::fmt::Debug for NQueensSolution {
                 continue;
             }
             for col in 0..board_size {
-                if lookup.contains(&(((row - 1) / 2) as u64, col as u64)) {
+                if lookup.contains(&(((row - 1) / 2) as Integer, col as Integer)) {
                     output += "| Q ";
                 } else {
                     output += "|   ";
@@ -58,7 +61,7 @@ impl std::fmt::Debug for NQueensSolution {
 
 // The number of conflicts, i.e. number of queens attacking each other. Want this to reach zero.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct NQueensScore(pub u64);
+pub struct NQueensScore(pub Integer);
 
 impl Score for NQueensScore {
     /// If there are no conflicts, i.e. a score of zero, this is the best score.
@@ -68,12 +71,12 @@ impl Score for NQueensScore {
 }
 
 /// Get conflict per column.
-fn get_col_scores(solution: &NQueensSolution) -> Vec<u64> {
+fn get_col_scores(solution: &NQueensSolution) -> Vec<Integer> {
     let mut result = vec![0; solution.rows.len()];
     for (col1, row1) in solution.rows.iter().enumerate() {
         for (col2, row2) in solution.rows.iter().enumerate().skip(col1 + 1) {
-            let row_diff = *row2 as i64 - *row1 as i64;
-            let column_diff = col2 as i64 - col1 as i64;
+            let row_diff = *row2 as Integer - *row1 as Integer;
+            let column_diff = col2 as Integer - col1 as Integer;
             if row_diff == 0 || row_diff.abs() == column_diff.abs() {
                 result[col1] += 1;
                 result[col2] += 1;
@@ -95,10 +98,10 @@ mod get_col_scores_tests {
         let scores = get_col_scores(&solution);
         println!("solution:\n{:?}\n, scores: {:?}", solution, scores);
         assert_eq!(solution.rows.len(), scores.len());
-        assert_eq!(3, *scores.get(&0).unwrap());
-        assert_eq!(3, *scores.get(&1).unwrap());
-        assert_eq!(3, *scores.get(&2).unwrap());
-        assert_eq!(3, *scores.get(&3).unwrap());
+        assert_eq!(3, *scores.get(0).unwrap());
+        assert_eq!(3, *scores.get(1).unwrap());
+        assert_eq!(3, *scores.get(2).unwrap());
+        assert_eq!(3, *scores.get(3).unwrap());
     }
 
     #[test]
@@ -109,10 +112,10 @@ mod get_col_scores_tests {
         let scores = get_col_scores(&solution);
         println!("solution:\n{:?}\n, scores: {:?}", solution, scores);
         assert_eq!(solution.rows.len(), scores.len());
-        assert_eq!(0, *scores.get(&0).unwrap());
-        assert_eq!(0, *scores.get(&1).unwrap());
-        assert_eq!(0, *scores.get(&2).unwrap());
-        assert_eq!(0, *scores.get(&3).unwrap());
+        assert_eq!(0, *scores.get(0).unwrap());
+        assert_eq!(0, *scores.get(1).unwrap());
+        assert_eq!(0, *scores.get(2).unwrap());
+        assert_eq!(0, *scores.get(3).unwrap());
     }
 }
 
@@ -124,9 +127,15 @@ impl SolutionScoreCalculator for NQueensSolutionScoreCalculator {
     type _Solution = NQueensSolution;
     type _Score = NQueensScore;
 
-    fn get_scored_solution(&self, solution: Self::_Solution) -> ScoredSolution<Self::_Solution, Self::_Score> {
+    fn get_scored_solution(
+        &self,
+        solution: Self::_Solution,
+    ) -> ScoredSolution<Self::_Solution, Self::_Score> {
         let row_scores = get_col_scores(&solution);
-        ScoredSolution { score: NQueensScore(row_scores.iter().sum()), solution }
+        ScoredSolution {
+            score: NQueensScore(row_scores.iter().sum()),
+            solution,
+        }
     }
 }
 
@@ -145,7 +154,7 @@ impl InitialSolutionGenerator for NQueensInitialSolutionGenerator {
     type Solution = NQueensSolution;
 
     fn generate_initial_solution(&self, rng: &mut Self::R) -> Self::Solution {
-        let mut rows: Vec<u64> = (0..usize::from(self.board_size)).map(|x| x as u64).collect();
+        let mut rows: Vec<Integer> = (0..usize::from(self.board_size)).map(|x| x as Integer).collect();
         rows.shuffle(rng);
         NQueensSolution { rows }
     }
@@ -169,8 +178,8 @@ impl MoveProposer for NQueensMoveProposer {
         &self,
         start: &Self::Solution,
         rng: &mut Self::R,
-    ) -> Box<dyn Iterator<Item=Self::Solution>> {
-        let mut cols_with_conflicts: Vec<(usize, u64)> = get_col_scores(start)
+    ) -> Box<dyn Iterator<Item = Self::Solution>> {
+        let mut cols_with_conflicts: Vec<(usize, Integer)> = get_col_scores(start)
             .into_iter()
             .enumerate()
             .filter(|(_row, score)| *score != 0)
@@ -195,10 +204,10 @@ impl MoveProposer for NQueensMoveProposer {
             // Some(cols_with_conflicts.iter().map(|(col, _score)| *col).collect())
         };
         struct MoveIterator {
-            board_size: u64,
+            board_size: Integer,
             cols: Option<Vec<usize>>,
             current_col: usize,
-            current_value: u64,
+            current_value: Integer,
             solution: NQueensSolution,
         }
 
@@ -223,10 +232,21 @@ impl MoveProposer for NQueensMoveProposer {
                     None
                 }
             }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                if let Some(cols) = &self.cols {
+                    (
+                        self.board_size as usize * cols.len(),
+                        Some(self.board_size as usize * cols.len()),
+                    )
+                } else {
+                    (0, Some(0))
+                }
+            }
         }
 
         Box::new(MoveIterator {
-            board_size: start.rows.len() as u64,
+            board_size: start.rows.len() as Integer,
             cols: random_cols,
             current_col: 0,
             current_value: 0,
@@ -281,14 +301,14 @@ impl Perturbation for NQueensPerturbation {
                 let board_size = current.solution.rows.len() as u64;
                 let mut rows: Vec<u64> = (0..board_size).collect();
                 rows.shuffle(rng);
-                let number_of_rows_to_alter = match history.is_best_solution(current) {
+                let number_of_rows_to_alter = match history.is_best_solution(current.clone()) {
                     true => rng.gen_range(1..=(board_size / 20).clamp(1, board_size)),
                     false => rng.gen_range(1..=(board_size / 2).clamp(1, board_size)),
                 };
                 let rows_to_alter: Vec<u64> =
                     rows.into_iter().take(number_of_rows_to_alter as usize).collect();
                 for i in rows_to_alter {
-                    let new_col = rng.gen_range(0..board_size);
+                    let new_col = rng.gen_range(0..board_size) as Integer;
                     new_solution.rows[i as usize] = new_col;
                 }
                 // println!("change subset perturbed {:?} to {:?}", &current.solution, &new_solution);

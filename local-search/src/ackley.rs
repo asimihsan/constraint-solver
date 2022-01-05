@@ -8,27 +8,29 @@
 ///
 /// [2] Optimization Test Problems: https://www.sfu.ca/~ssurjano/optimization.html
 /// [3] Ackley Function: https://www.sfu.ca/~ssurjano/ackley.html
-use float_ord::FloatOrd;
 use math_util::ackley::AckleyFunction;
+use ordered_float::OrderedFloat;
 use rand::{prelude::SliceRandom, Rng};
 use rand_distr::Distribution;
 
 use crate::iterated_local_search::Perturbation;
-use crate::local_search::{InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator};
+use crate::local_search::{
+    InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct AckleySolution {
-    x: Vec<FloatOrd<f64>>,
+    x: Vec<OrderedFloat<f64>>,
 }
 impl Solution for AckleySolution {}
 impl AckleySolution {
-    pub fn new(x: Vec<FloatOrd<f64>>) -> Self {
+    pub fn new(x: Vec<OrderedFloat<f64>>) -> Self {
         AckleySolution { x }
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct AckleyScore(FloatOrd<f64>);
+pub struct AckleyScore(OrderedFloat<f64>);
 impl Score for AckleyScore {
     /// We know the best score is 0.0, so let's say we're best at a certain epsilon.
     fn is_best(&self) -> bool {
@@ -61,9 +63,15 @@ impl SolutionScoreCalculator for AckleySolutionScoreCalculator {
     type _Solution = AckleySolution;
     type _Score = AckleyScore;
 
-    fn get_scored_solution(&self, solution: Self::_Solution) -> ScoredSolution<Self::_Solution, Self::_Score> {
+    fn get_scored_solution(
+        &self,
+        solution: Self::_Solution,
+    ) -> ScoredSolution<Self::_Solution, Self::_Score> {
         let score = self.ackley_function.calculate(&solution.x);
-        ScoredSolution{ score: AckleyScore(FloatOrd(score)), solution }
+        ScoredSolution {
+            score: AckleyScore(OrderedFloat(score)),
+            solution,
+        }
     }
 }
 
@@ -86,7 +94,7 @@ impl InitialSolutionGenerator for AckleyInitialSolutionGenerator {
         let x_max = 32.768;
         AckleySolution {
             x: (0..self.dimensions)
-                .map(|_| FloatOrd(rng.gen_range(x_min..x_max)))
+                .map(|_| OrderedFloat(rng.gen_range(x_min..x_max)))
                 .collect(),
         }
     }
@@ -151,17 +159,21 @@ impl MoveProposer for AckleyMoveProposer {
                 match self.current_move {
                     MoveUpOrDown::Up => {
                         current_solution.x[dimension_from_schedule] =
-                            FloatOrd(current_solution.x[dimension_from_schedule].0 + self.move_size);
+                            OrderedFloat(current_solution.x[dimension_from_schedule].0 + self.move_size);
                         self.current_move = MoveUpOrDown::Down;
                     }
                     MoveUpOrDown::Down => {
                         current_solution.x[dimension_from_schedule] =
-                            FloatOrd(current_solution.x[dimension_from_schedule].0 - self.move_size);
+                            OrderedFloat(current_solution.x[dimension_from_schedule].0 - self.move_size);
                         self.current_dimension += 1;
                         self.current_move = MoveUpOrDown::Up;
                     }
                 }
                 Some(current_solution)
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                (self.dimensions * 2, Some(self.dimensions * 2))
             }
         }
 
@@ -234,7 +246,7 @@ impl Perturbation for AckleyPerturbation {
                 for i in dimensions_to_alter {
                     let normal = rand_distr::Normal::new(new_solution.x[i].0, 1.0).unwrap();
                     let v = normal.sample(rng).clamp(x_min, x_max);
-                    new_solution.x[i] = FloatOrd(v)
+                    new_solution.x[i] = OrderedFloat(v)
                 }
                 // println!("change subset perturbed {:?} to {:?}", &current.solution, &new_solution);
                 new_solution

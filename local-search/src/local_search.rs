@@ -14,8 +14,9 @@ use rand::prelude::SliceRandom;
 
 /// Solution is a plain old data object.
 pub trait Solution:
-Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::hash::Hash + std::fmt::Debug
-{}
+    Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::hash::Hash + std::fmt::Debug
+{
+}
 
 /// Score for a solution. Could just be e.g. u64, f64, num::Num. Could be more complicated like a tuple
 /// (hard score, soft score).
@@ -25,21 +26,20 @@ pub trait Score: Clone + Send + PartialEq + Eq + PartialOrd + Ord + std::fmt::De
     fn is_best(&self) -> bool;
 }
 
-#[derive(Derivative)]
-#[derivative(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ScoredSolution<_Solution, _Score>
-    where
-        _Solution: Solution,
-        _Score: Score,
+where
+    _Solution: Solution,
+    _Score: Score,
 {
     pub score: _Score,
     pub solution: _Solution,
 }
 
 impl<_Solution, _Score> ScoredSolution<_Solution, _Score>
-    where
-        _Solution: Solution,
-        _Score: Score,
+where
+    _Solution: Solution,
+    _Score: Score,
 {
     pub fn new(solution: _Solution, score: _Score) -> Self {
         Self { solution, score }
@@ -61,7 +61,8 @@ pub trait SolutionScoreCalculator {
 
     /// get_scored_solution calculates the score of a solution. See SolutionScoreCalculator doc for ideas about what the score
     /// should be.
-    fn get_scored_solution(&self, solution: Self::_Solution) -> ScoredSolution<Self::_Solution, Self::_Score>;
+    fn get_scored_solution(&self, solution: Self::_Solution)
+        -> ScoredSolution<Self::_Solution, Self::_Score>;
 }
 
 pub trait InitialSolutionGenerator {
@@ -85,15 +86,15 @@ pub trait MoveProposer {
         &self,
         start: &Self::Solution,
         rng: &mut Self::R,
-    ) -> Box<dyn Iterator<Item=Self::Solution>>;
+    ) -> Box<dyn Iterator<Item = Self::Solution>>;
 }
 
 #[derive(Derivative)]
 #[derivative(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct ScoredSolutionAndIterationAdded<_Solution, _Score>
-    where
-        _Solution: Solution,
-        _Score: Score,
+where
+    _Solution: Solution,
+    _Score: Score,
 {
     scored_solution: ScoredSolution<_Solution, _Score>,
     iteration: u64,
@@ -102,10 +103,10 @@ struct ScoredSolutionAndIterationAdded<_Solution, _Score>
 /// History keeps track of the all solutions that LocalSearch finds. You can then ask History for the best solutions
 /// it's seen so far, the tabu set, etc.
 pub struct History<_R, _Solution, _Score>
-    where
-        _R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
 {
     best_solutions: BTreeSet<ScoredSolution<_Solution, _Score>>,
     best_solutions_capacity: usize,
@@ -118,10 +119,10 @@ pub struct History<_R, _Solution, _Score>
 }
 
 impl<_R, _Solution, _Score> Default for History<_R, _Solution, _Score>
-    where
-        _R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
 {
     fn default() -> Self {
         Self::new(16, 10_000, 100_000)
@@ -129,10 +130,10 @@ impl<_R, _Solution, _Score> Default for History<_R, _Solution, _Score>
 }
 
 impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
-    where
-        _R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
+where
+    _R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
 {
     pub fn new(
         best_solutions_capacity: usize,
@@ -151,7 +152,7 @@ impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
         }
     }
 
-    pub fn seen_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+    pub fn seen_solution(&mut self, solution: ScoredSolution<_Solution, _Score>) {
         self.iteration_count += 1;
         self._pop_solution_for_age();
         if self.all_solutions_lookup.contains(&solution.solution) {
@@ -160,7 +161,7 @@ impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
         self._add_solution(solution);
     }
 
-    fn _add_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+    fn _add_solution(&mut self, solution: ScoredSolution<_Solution, _Score>) {
         self._pop_solution_for_size();
         self.all_solutions.push_front(ScoredSolutionAndIterationAdded {
             scored_solution: solution.clone(),
@@ -197,11 +198,11 @@ impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
         self.all_solutions_lookup.contains(solution)
     }
 
-    pub fn is_best_solution(&self, solution: &ScoredSolution<_Solution, _Score>) -> bool {
-        self.best_solutions.contains(solution)
+    pub fn is_best_solution(&self, solution: ScoredSolution<_Solution, _Score>) -> bool {
+        self.best_solutions.contains(&solution)
     }
 
-    pub fn local_search_chose_solution(&mut self, solution: &ScoredSolution<_Solution, _Score>) {
+    pub fn local_search_chose_solution(&mut self, solution: ScoredSolution<_Solution, _Score>) {
         if self.best_solutions.len() < self.best_solutions_capacity {
             self.best_solutions.insert(solution.clone());
             return;
@@ -250,12 +251,12 @@ impl<_R, _Solution, _Score> History<_R, _Solution, _Score>
 
 /// LocalSearch lets you find local minima for an optimization problem.
 pub struct LocalSearch<R, _Solution, _Score, SSC, MP>
-    where
-        R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
-        SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
-        MP: MoveProposer<R=R, Solution=_Solution>,
+where
+    R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
+    MP: MoveProposer<R = R, Solution = _Solution>,
 {
     move_proposer: MP,
     solution_score_calculator: SSC,
@@ -266,12 +267,12 @@ pub struct LocalSearch<R, _Solution, _Score, SSC, MP>
 }
 
 impl<R, _Solution, _Score, SSC, MP> LocalSearch<R, _Solution, _Score, SSC, MP>
-    where
-        R: rand::Rng,
-        _Solution: Solution,
-        _Score: Score,
-        SSC: SolutionScoreCalculator<_Solution=_Solution, _Score=_Score>,
-        MP: MoveProposer<R=R, Solution=_Solution>,
+where
+    R: rand::Rng,
+    _Solution: Solution,
+    _Score: Score,
+    SSC: SolutionScoreCalculator<_Solution = _Solution, _Score = _Score>,
+    MP: MoveProposer<R = R, Solution = _Solution>,
 {
     pub fn new(
         move_proposer: MP,
@@ -306,7 +307,7 @@ impl<R, _Solution, _Score, SSC, MP> LocalSearch<R, _Solution, _Score, SSC, MP>
         let mut best_solution = current_solution.clone();
         let mut no_improvement_for = 0;
         for _current_iteration in 0..self.max_iterations {
-            self.history.seen_solution(&current_solution);
+            self.history.seen_solution(current_solution.clone());
             if current_solution.score.is_best() {
                 println!("local search found best possible solution and is terminating");
                 return current_solution;
@@ -356,7 +357,7 @@ mod ackley_tests {
         local_search::{InitialSolutionGenerator, LocalSearch, SolutionScoreCalculator},
     };
     use approx::assert_abs_diff_eq;
-    use float_ord::FloatOrd;
+    use ordered_float::OrderedFloat;
     use rand::SeedableRng;
 
     #[test]
@@ -449,7 +450,7 @@ mod ackley_tests {
             solver_rng,
         );
 
-        let start = AckleySolution::new((0..dimensions).map(|_| FloatOrd(0.0)).collect());
+        let start = AckleySolution::new((0..dimensions).map(|_| OrderedFloat(0.0)).collect());
         println!("start: {:?}", start);
         let allow_no_improvement_for = 1;
         let end = local_search.execute(start.clone(), allow_no_improvement_for);

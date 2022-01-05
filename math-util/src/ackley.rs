@@ -1,9 +1,10 @@
+use ordered_float::OrderedFloat;
+
 ///! In order to test local search methods, use the Ackley Function [3] from [2].
 ///!
 ///! [2] Optimization Test Problems: https://www.sfu.ca/~ssurjano/optimization.html
 ///!
 ///! [3] Ackley Function: https://www.sfu.ca/~ssurjano/ackley.html
-use float_ord::FloatOrd;
 pub struct AckleyFunction {
     a: f64,
     b: f64,
@@ -15,7 +16,7 @@ impl AckleyFunction {
         AckleyFunction { a, b, c }
     }
 
-    pub fn calculate(&self, xs: &Vec<FloatOrd<f64>>) -> f64 {
+    pub fn calculate(&self, xs: &Vec<OrderedFloat<f64>>) -> f64 {
         let dimensions: f64 = xs.len() as f64;
         let mut fx: f64 = 0.0;
         let mut square_sum = 0.0;
@@ -53,21 +54,21 @@ impl Default for AckleyFunction {
 #[cfg(test)]
 mod tests {
     use approx::assert_abs_diff_eq;
-    use float_ord::FloatOrd;
+    use ordered_float::OrderedFloat;
 
     use super::AckleyFunction;
 
     #[test]
     fn test_ackley_function_zero() {
         let ackley = AckleyFunction::default();
-        let actual_result = ackley.calculate(&vec![FloatOrd(0.0), FloatOrd(0.0)]);
+        let actual_result = ackley.calculate(&vec![OrderedFloat(0.0), OrderedFloat(0.0)]);
         assert_abs_diff_eq!(0.0, actual_result, epsilon = 1e-12);
     }
 
     #[test]
     fn test_ackley_function_2d() {
         let ackley = AckleyFunction::default();
-        let actual_result = ackley.calculate(&vec![FloatOrd(1.0), FloatOrd(1.0)]);
+        let actual_result = ackley.calculate(&vec![OrderedFloat(1.0), OrderedFloat(1.0)]);
         assert_abs_diff_eq!(3.625384938440363, actual_result, epsilon = 1e-12);
     }
 
@@ -75,26 +76,26 @@ mod tests {
     fn test_ackley_function_20d() {
         let ackley = AckleyFunction::default();
         let actual_result = ackley.calculate(&vec![
-            FloatOrd(0.0),
-            FloatOrd(1.0),
-            FloatOrd(2.0),
-            FloatOrd(3.0),
-            FloatOrd(4.0),
-            FloatOrd(5.0),
-            FloatOrd(6.0),
-            FloatOrd(7.0),
-            FloatOrd(8.0),
-            FloatOrd(9.0),
-            FloatOrd(0.0),
-            FloatOrd(1.0),
-            FloatOrd(2.0),
-            FloatOrd(3.0),
-            FloatOrd(4.0),
-            FloatOrd(5.0),
-            FloatOrd(6.0),
-            FloatOrd(7.0),
-            FloatOrd(8.0),
-            FloatOrd(9.0),
+            OrderedFloat(0.0),
+            OrderedFloat(1.0),
+            OrderedFloat(2.0),
+            OrderedFloat(3.0),
+            OrderedFloat(4.0),
+            OrderedFloat(5.0),
+            OrderedFloat(6.0),
+            OrderedFloat(7.0),
+            OrderedFloat(8.0),
+            OrderedFloat(9.0),
+            OrderedFloat(0.0),
+            OrderedFloat(1.0),
+            OrderedFloat(2.0),
+            OrderedFloat(3.0),
+            OrderedFloat(4.0),
+            OrderedFloat(5.0),
+            OrderedFloat(6.0),
+            OrderedFloat(7.0),
+            OrderedFloat(8.0),
+            OrderedFloat(9.0),
         ]);
         assert_abs_diff_eq!(13.12408690638194, actual_result, epsilon = 1e-12);
     }

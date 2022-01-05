@@ -1,10 +1,8 @@
-struct DiagramSpecification {
+mod geom;
 
-}
+struct DiagramSpecification {}
 
-struct DiagramSolution {
-
-}
+struct DiagramSolution {}
 
 fn main() {
     println!("Hello, world!");

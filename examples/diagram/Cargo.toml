@@ -5,11 +5,28 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bench]]
+name = "primitives_benchmark"
+harness = false
+
+[dev-dependencies]
+criterion = "0.3.5"
+proptest = "1.0.0"
+quickcheck = "1.0.3"
+quickcheck_macros = "1.0.0"
+
 [dependencies]
+approx = "0.5.0"
 blake2 = "0.10.0"
 clap = "2.34.0"
 derivative = "2.2.0"
-euclid = "0.22.6"
+fixed = { version = "1.11.0", features = ["num-traits"] }
+fraction = "0.9.0"
+geo = "0.18.0"
+itertools = "0.10.3"
 local-search = { path = "../../local-search" }
+num-traits = "0.2.14"
+ordered-float = "2.8.0"
 rand = "0.8.4"
 rand_chacha = "0.3.1"
+rust_decimal = "1.19.0"
