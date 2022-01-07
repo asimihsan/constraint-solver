@@ -1,2 +1,1 @@
-mod geom;
-mod primitives;
+pub mod geom;

@@ -1,21 +1,20 @@
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::Bound::{Excluded, Unbounded};
 
 use approx::AbsDiffEq;
-use geo::algorithm::contains::Contains;
 use geo::line_intersection::{line_intersection, LineIntersection};
 use geo::prelude::BoundingRect;
-use geo::GeometryCollection;
+use geo::{Coordinate, GeometryCollection};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
-pub(crate) type Float = f64;
+pub type Float = f64;
 
 const EPSILON: Float = 1e-6;
 
-pub(crate) type Unit = OrderedFloat<Float>;
+pub type Unit = OrderedFloat<Float>;
 
 #[derive(Clone, Debug)]
 struct ApproxEqUnit(Unit);
@@ -75,7 +74,7 @@ impl std::convert::From<u8> for PortNumber {
 /// 1 is default and means you have north, east, south, and west points in the middle of each
 /// side. Any or all can be zero, meaning no connectors. Cannot be negative.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) struct Ports {
+pub struct Ports {
     top: PortNumber,
     right: PortNumber,
     bottom: PortNumber,
@@ -105,7 +104,7 @@ impl Default for Ports {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) struct Padding {
+pub struct Padding {
     top: Unit,
     right: Unit,
     bottom: Unit,
@@ -142,9 +141,9 @@ enum HorizontalLineEventType {
 }
 
 struct HorizontalLineEvent<'a> {
-    pub(crate) r#type: HorizontalLineEventType,
-    pub(crate) vertical_position: VerticalPosition,
-    pub(crate) geom_box: &'a GeomBox,
+    pub r#type: HorizontalLineEventType,
+    pub vertical_position: VerticalPosition,
+    pub geom_box: &'a GeomBox,
 }
 
 impl<'a> Eq for HorizontalLineEvent<'a> {}
@@ -264,14 +263,155 @@ impl<'a> Iterator for HorizontalLineEventIterator<'a> {
 
 impl<'a> ExactSizeIterator for HorizontalLineEventIterator<'a> {}
 
+enum VerticalLineEventIteratorState {
+    Open,
+    TopPort(PortNumber),
+    BottomPort(PortNumber),
+    Close,
+    End,
+}
+
+type HorizontalPosition = Unit;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+enum VerticalLineEventType {
+    Open,
+    TopPort(PortNumber),
+    BottomPort(PortNumber),
+    Close,
+}
+
+struct VerticalLineEvent<'a> {
+    pub r#type: VerticalLineEventType,
+    pub horizontal_position: HorizontalPosition,
+    pub geom_box: &'a GeomBox,
+}
+
+impl<'a> Eq for VerticalLineEvent<'a> {}
+
+impl<'a> PartialEq<Self> for VerticalLineEvent<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.horizontal_position
+            .0
+            .abs_diff_eq(&other.horizontal_position.0, EPSILON)
+    }
+}
+
+impl<'a> PartialOrd<Self> for VerticalLineEvent<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.horizontal_position.partial_cmp(&other.horizontal_position)
+    }
+}
+
+impl<'a> Ord for VerticalLineEvent<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.horizontal_position.cmp(&other.horizontal_position)
+    }
+}
+
+/// Iterate over x-values of interesting vertical segments for a GeomBox. Will not be sorted and
+/// may contain duplicates.
+struct VerticalLineEventIterator<'a> {
+    state: VerticalLineEventIteratorState,
+    geom_box: &'a GeomBox,
+    remaining_lines: u16,
+}
+
+impl<'a> VerticalLineEventIterator<'a> {
+    pub fn new(geom_box: &'a GeomBox) -> Self {
+        const LEFT_LINES: u16 = 1;
+        let top_port_lines: u16 = *geom_box.ports.top as u16;
+        let bottom_port_lines: u16 = *geom_box.ports.bottom as u16;
+        const RIGHT_LINES: u16 = 1;
+        Self {
+            state: VerticalLineEventIteratorState::Open,
+            geom_box,
+            remaining_lines: LEFT_LINES + top_port_lines + bottom_port_lines + RIGHT_LINES,
+        }
+    }
+}
+
+impl<'a> Iterator for VerticalLineEventIterator<'a> {
+    type Item = VerticalLineEvent<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.state {
+            VerticalLineEventIteratorState::Open => {
+                if *self.geom_box.ports.top != 0 {
+                    self.state = VerticalLineEventIteratorState::TopPort(PortNumber(1));
+                } else if *self.geom_box.ports.bottom != 0 {
+                    self.state = VerticalLineEventIteratorState::BottomPort(PortNumber(1));
+                } else {
+                    self.state = VerticalLineEventIteratorState::Close;
+                }
+                self.remaining_lines -= 1;
+                Some(VerticalLineEvent {
+                    r#type: VerticalLineEventType::Open,
+                    horizontal_position: self.geom_box.left_x(UsePadding::Yes),
+                    geom_box: self.geom_box,
+                })
+            }
+            VerticalLineEventIteratorState::TopPort(PortNumber(current)) => {
+                if current == *self.geom_box.ports.top {
+                    if *self.geom_box.ports.bottom != 0 {
+                        self.state = VerticalLineEventIteratorState::BottomPort(PortNumber(1));
+                    } else {
+                        self.state = VerticalLineEventIteratorState::Close;
+                    }
+                } else {
+                    self.state = VerticalLineEventIteratorState::TopPort(PortNumber(current + 1));
+                }
+                self.remaining_lines -= 1;
+                Some(VerticalLineEvent {
+                    r#type: VerticalLineEventType::TopPort(PortNumber(current)),
+                    horizontal_position: self.geom_box.get_top_port(PortNumber(current), UsePadding::No).x,
+                    geom_box: self.geom_box,
+                })
+            }
+            VerticalLineEventIteratorState::BottomPort(PortNumber(current)) => {
+                if current == *self.geom_box.ports.bottom {
+                    self.state = VerticalLineEventIteratorState::Close;
+                } else {
+                    self.state = VerticalLineEventIteratorState::BottomPort(PortNumber(current + 1));
+                }
+                self.remaining_lines -= 1;
+                Some(VerticalLineEvent {
+                    r#type: VerticalLineEventType::BottomPort(PortNumber(current)),
+                    horizontal_position: self
+                        .geom_box
+                        .get_bottom_port(PortNumber(current), UsePadding::No)
+                        .x,
+                    geom_box: self.geom_box,
+                })
+            }
+            VerticalLineEventIteratorState::Close => {
+                self.state = VerticalLineEventIteratorState::End;
+                self.remaining_lines -= 1;
+                Some(VerticalLineEvent {
+                    r#type: VerticalLineEventType::Close,
+                    horizontal_position: self.geom_box.right_x(UsePadding::Yes),
+                    geom_box: self.geom_box,
+                })
+            }
+            VerticalLineEventIteratorState::End => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining_lines as usize, Some(self.remaining_lines as usize))
+    }
+}
+
+impl<'a> ExactSizeIterator for VerticalLineEventIterator<'a> {}
+
 /// GeomBox represents a box in 2D. It also comes with
 /// - padding (how much space an incoming line must travel straight for into a port) and
 /// - ports (additional connectors on sides).
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub(crate) struct GeomBox {
-    rect: geo::Rect<Unit>,
-    padding: Padding,
-    ports: Ports,
+pub struct GeomBox {
+    pub rect: geo::Rect<Unit>,
+    pub padding: Padding,
+    pub ports: Ports,
 }
 
 #[derive(Clone, Debug)]
@@ -309,6 +449,41 @@ impl<'a> Ord for GeomBoxSortedLeftToRight<'a> {
     }
 }
 
+#[derive(Clone, Debug)]
+struct GeomBoxSortedTopToBottom<'a>(&'a GeomBox);
+
+impl<'a> Eq for GeomBoxSortedTopToBottom<'a> {}
+
+impl<'a> PartialEq<Self> for GeomBoxSortedTopToBottom<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl<'a> PartialOrd<Self> for GeomBoxSortedTopToBottom<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for GeomBoxSortedTopToBottom<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for (first, second) in self
+            .0
+            .vertical_sort_amounts()
+            .into_iter()
+            .zip(other.0.vertical_sort_amounts())
+        {
+            let cmp = first.cmp(&second);
+            match cmp {
+                Ordering::Greater | Ordering::Less => return cmp,
+                _ => continue,
+            }
+        }
+        Ordering::Equal
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum UsePadding {
     Yes,
@@ -322,6 +497,15 @@ impl GeomBox {
             self.right_x(UsePadding::Yes),
             self.top_y(UsePadding::Yes),
             self.bottom_y(UsePadding::Yes),
+        ]
+    }
+
+    fn vertical_sort_amounts(&self) -> [Unit; 4] {
+        [
+            self.top_y(UsePadding::Yes),
+            self.bottom_y(UsePadding::Yes),
+            self.left_x(UsePadding::Yes),
+            self.right_x(UsePadding::Yes),
         ]
     }
 
@@ -391,13 +575,17 @@ pub struct Diagram {
 }
 
 impl Diagram {
-    pub(crate) fn new(boxes: Vec<GeomBox>) -> Self {
-        let bounding_rects: Vec<geo::Geometry<Unit>> = boxes
-            .iter()
-            .map(|geom_box| geom_box.padded_rect())
-            .map(geo::Geometry::Rect)
-            .collect();
-        let bounding_box: geo::Rect<Unit> = GeometryCollection(bounding_rects).bounding_rect().unwrap();
+    pub fn new(boxes: Vec<GeomBox>) -> Self {
+        let bounding_box: geo::Rect<Unit> = GeometryCollection(
+            boxes
+                .iter()
+                .map(|geom_box| geom_box.padded_rect())
+                .map(geo::Geometry::Rect)
+                .collect(),
+        )
+        .bounding_rect()
+        .unwrap();
+
         Self { boxes, bounding_box }
     }
 }
@@ -424,7 +612,7 @@ impl Diagram {
 ///
 /// Orthogonal connector routing - Wybrow, Michael and Marriott, Kim and Stuckey, Peter J - 2009
 /// page 4
-pub(crate) fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<Float>> {
+pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<Float>> {
     let geom_boxes = &diagram.boxes;
     let diagram_min_x = diagram.bounding_box.min().x;
     let diagram_max_x = diagram.bounding_box.max().x;
@@ -477,13 +665,115 @@ pub(crate) fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo:
     result
 }
 
-pub(crate) fn get_interesting_vertical_segments(_diagram: &Diagram) -> Vec<geo::Line<Unit>> {
-    // let mut _boxes = &diagram.boxes;
-    let result = vec![];
+pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Float>> {
+    let geom_boxes = &diagram.boxes;
+    let diagram_min_y = diagram.bounding_box.min().y;
+    let diagram_max_y = diagram.bounding_box.max().y;
+    let mut open_geom_boxes: BTreeSet<GeomBoxSortedTopToBottom> = BTreeSet::new();
+    let vertical_line_events: Vec<VerticalLineEvent> = geom_boxes
+        .iter()
+        .flat_map(VerticalLineEventIterator::new)
+        .sorted_unstable_by_key(|vertical_line_event| vertical_line_event.horizontal_position)
+        .collect();
+    let mut result: Vec<geo::Line<Float>> = Vec::with_capacity(vertical_line_events.len());
+    for event in vertical_line_events {
+        let x = event.horizontal_position;
+        let top_y = match &event.r#type {
+            VerticalLineEventType::BottomPort(_port_number) => event.geom_box.bottom_y(UsePadding::No),
+            _ => {
+                let maybe_top_geom_box = open_geom_boxes
+                    .range((Unbounded, Excluded(GeomBoxSortedTopToBottom(event.geom_box))))
+                    .next_back();
+                match maybe_top_geom_box {
+                    None => diagram_min_y,
+                    Some(GeomBoxSortedTopToBottom(geom_box)) => geom_box.bottom_y(UsePadding::Yes),
+                }
+            }
+        };
+        let bottom_y = match &event.r#type {
+            VerticalLineEventType::TopPort(_port_number) => event.geom_box.top_y(UsePadding::No),
+            _ => {
+                let maybe_bottom_geom_box = open_geom_boxes
+                    .range((Excluded(GeomBoxSortedTopToBottom(event.geom_box)), Unbounded))
+                    .next();
+                match maybe_bottom_geom_box {
+                    None => diagram_max_y,
+                    Some(GeomBoxSortedTopToBottom(geom_box)) => geom_box.top_y(UsePadding::Yes),
+                }
+            }
+        };
+
+        let new_line: geo::Line<Float> = geo::Line::new((x.0, top_y.0), (x.0, bottom_y.0));
+        result.push(new_line);
+
+        match event.r#type {
+            VerticalLineEventType::Open => {
+                open_geom_boxes.insert(GeomBoxSortedTopToBottom(event.geom_box));
+            }
+            VerticalLineEventType::Close => {
+                open_geom_boxes.remove(&GeomBoxSortedTopToBottom(event.geom_box));
+            }
+            _ => {}
+        }
+    }
     result
 }
 
-fn new_rect<T>(first: (T, T), second: (T, T)) -> geo::Rect<Unit>
+fn h_v_line_intersection(
+    first: geo::Line<Float>,
+    second: geo::Line<Float>,
+) -> Option<geo::Coordinate<Float>> {
+    if let Some(LineIntersection::SinglePoint {
+        intersection,
+        is_proper: _is_proper,
+    }) = line_intersection(first, second)
+    {
+        Some(geo::Coordinate::from([intersection.x, intersection.y]))
+    } else {
+        None
+    }
+}
+
+/// Interesting points are all segment intersections and ports.
+pub fn get_interesting_points(diagram: &Diagram) -> HashSet<geo::Coordinate<Unit>, impl fasthash::FastHash> {
+    let interesting_horizontal_segments: Vec<_> = get_interesting_horizontal_segments(diagram);
+    let interesting_vertical_segments: Vec<_> = get_interesting_vertical_segments(diagram);
+    let hasher = fasthash::sea::Hash64;
+    let mut result: HashSet<geo::Coordinate<Unit>, _> = HashSet::with_capacity_and_hasher(
+        interesting_horizontal_segments.len() * interesting_vertical_segments.len(),
+        hasher,
+    );
+
+    for geom_box in &diagram.boxes {
+        for i in 0..*geom_box.ports.top {
+            result.insert(geom_box.get_top_port(PortNumber(i), UsePadding::No));
+        }
+        for i in 0..*geom_box.ports.right {
+            result.insert(geom_box.get_right_port(PortNumber(i), UsePadding::No));
+        }
+        for i in 0..*geom_box.ports.bottom {
+            result.insert(geom_box.get_bottom_port(PortNumber(i), UsePadding::No));
+        }
+        for i in 0..*geom_box.ports.left {
+            result.insert(geom_box.get_left_port(PortNumber(i), UsePadding::No));
+        }
+    }
+
+    interesting_horizontal_segments.iter().for_each(|h| {
+        interesting_vertical_segments
+            .iter()
+            .for_each(|v| match h_v_line_intersection(*h, *v) {
+                None => {}
+                Some(intersection) => {
+                    result.insert([Unit::from(intersection.x), Unit::from(intersection.y)].into());
+                }
+            })
+    });
+
+    result
+}
+
+pub fn new_rect<T>(first: (T, T), second: (T, T)) -> geo::Rect<Unit>
 where
     T: std::fmt::Debug + Into<Unit>,
 {
@@ -499,11 +789,29 @@ where
     )
 }
 
+fn line_to_string(line: &Vec<geo::Line<Float>>) -> String {
+    line.iter()
+        .map(|s| {
+            String::from(format!(
+                "{{({},{}),({},{})}}",
+                s.start.x, s.start.y, s.end.x, s.end.y
+            ))
+        })
+        .join(", ")
+}
+
+fn points_to_string(line: &Vec<geo::Coordinate<Unit>>) -> String {
+    line.iter()
+        .map(|s| String::from(format!("({},{})", s.x, s.y)))
+        .join(", ")
+}
+
 #[cfg(test)]
 mod diagram_geom_tests {
-    use super::*;
     use approx::assert_abs_diff_eq;
     use proptest::prelude::*;
+
+    use super::*;
 
     #[test]
     pub fn horizontal_line_y_iterator_example_01() {
@@ -612,5 +920,68 @@ mod diagram_geom_tests {
                 [(90.0, 210.0), (410.0, 210.0)].into(),
             ],
         );
+    }
+
+    #[test]
+    pub fn get_interesting_vertical_segments_example_01() {
+        // === given ===
+        let diagram = Diagram::new(vec![
+            GeomBox {
+                rect: new_rect((100.0, 100.0), (200.0, 200.0)),
+                padding: Padding::new_uniform(10.0),
+                ports: Ports::new(1, 1, 0, 0),
+            },
+            GeomBox {
+                rect: new_rect((300.0, 100.0), (400.0, 200.0)),
+                padding: Padding::new_uniform(10.0),
+                ports: Ports::new(0, 0, 0, 1),
+            },
+        ]);
+
+        // === when ===
+        let segments = super::get_interesting_vertical_segments(&diagram);
+
+        // === then ===
+        println!("actual: {:?}", line_to_string(&segments));
+        assert_eq!(
+            segments.as_slice(),
+            &[
+                // Top-to-bottom line caused by first (left-most) box
+                [(90.0, 90.0), (90.0, 210.0)].into(),
+                // Line into the first box's top port
+                [(150.0, 90.0), (150.0, 100.0)].into(),
+                // Right line caused by first box top to bottom
+                [(210.0, 90.0), (210.0, 210.0)].into(),
+                // Top-to-bottom line on left side of second box
+                [(290.0, 90.0), (290.0, 210.0)].into(),
+                // Top-to-bottom line on right side of second (right-most) box
+                [(410.0, 90.0), (410.0, 210.0)].into(),
+            ],
+        );
+    }
+
+    #[test]
+    pub fn get_interesting_points_01() {
+        // === given ===
+        let diagram = Diagram::new(vec![
+            GeomBox {
+                rect: new_rect((100.0, 100.0), (200.0, 200.0)),
+                padding: Padding::new_uniform(10.0),
+                ports: Ports::new(1, 1, 0, 0),
+            },
+            GeomBox {
+                rect: new_rect((300.0, 100.0), (400.0, 200.0)),
+                padding: Padding::new_uniform(10.0),
+                ports: Ports::new(0, 0, 0, 1),
+            },
+        ]);
+
+        // === when ===
+        let points = super::get_interesting_points(&diagram);
+        let points = points.into_iter().collect();
+
+        // === then ===
+        println!("points: {:?}", points_to_string(&points));
+        // assert_eq!(points, vec![]);
     }
 }
