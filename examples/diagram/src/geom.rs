@@ -1,12 +1,12 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::Bound::{Excluded, Unbounded};
 
 use approx::AbsDiffEq;
 use geo::line_intersection::{line_intersection, LineIntersection};
 use geo::prelude::BoundingRect;
-use geo::{Coordinate, GeometryCollection};
+use geo::GeometryCollection;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
@@ -612,7 +612,7 @@ impl Diagram {
 ///
 /// Orthogonal connector routing - Wybrow, Michael and Marriott, Kim and Stuckey, Peter J - 2009
 /// page 4
-pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<Float>> {
+pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<Unit>> {
     let geom_boxes = &diagram.boxes;
     let diagram_min_x = diagram.bounding_box.min().x;
     let diagram_max_x = diagram.bounding_box.max().x;
@@ -622,7 +622,7 @@ pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<F
         .flat_map(HorizontalLineEventIterator::new)
         .sorted_unstable_by_key(|horizontal_line_event| horizontal_line_event.vertical_position)
         .collect();
-    let mut result: Vec<geo::Line<Float>> = Vec::with_capacity(horizontal_line_events.len());
+    let mut result: Vec<geo::Line<Unit>> = Vec::with_capacity(horizontal_line_events.len());
     for event in horizontal_line_events {
         let y = event.vertical_position;
         let left_x = match &event.r#type {
@@ -649,7 +649,7 @@ pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<F
                 }
             }
         };
-        let new_line: geo::Line<Float> = geo::Line::new((left_x.0, y.0), (right_x.0, y.0));
+        let new_line: geo::Line<Unit> = geo::Line::new((left_x, y), (right_x, y));
         result.push(new_line);
 
         match event.r#type {
@@ -665,7 +665,7 @@ pub fn get_interesting_horizontal_segments(diagram: &Diagram) -> Vec<geo::Line<F
     result
 }
 
-pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Float>> {
+pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Unit>> {
     let geom_boxes = &diagram.boxes;
     let diagram_min_y = diagram.bounding_box.min().y;
     let diagram_max_y = diagram.bounding_box.max().y;
@@ -675,7 +675,7 @@ pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Flo
         .flat_map(VerticalLineEventIterator::new)
         .sorted_unstable_by_key(|vertical_line_event| vertical_line_event.horizontal_position)
         .collect();
-    let mut result: Vec<geo::Line<Float>> = Vec::with_capacity(vertical_line_events.len());
+    let mut result: Vec<geo::Line<Unit>> = Vec::with_capacity(vertical_line_events.len());
     for event in vertical_line_events {
         let x = event.horizontal_position;
         let top_y = match &event.r#type {
@@ -703,7 +703,7 @@ pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Flo
             }
         };
 
-        let new_line: geo::Line<Float> = geo::Line::new((x.0, top_y.0), (x.0, bottom_y.0));
+        let new_line: geo::Line<Unit> = geo::Line::new((x, top_y), (x, bottom_y));
         result.push(new_line);
 
         match event.r#type {
@@ -719,58 +719,94 @@ pub fn get_interesting_vertical_segments(diagram: &Diagram) -> Vec<geo::Line<Flo
     result
 }
 
-fn h_v_line_intersection(
-    first: geo::Line<Float>,
-    second: geo::Line<Float>,
-) -> Option<geo::Coordinate<Float>> {
+fn h_v_line_intersection(first: geo::Line<Unit>, second: geo::Line<Unit>) -> Option<geo::Coordinate<Unit>> {
+    let first: geo::Line<Float> =
+        geo::Line::new((first.start.x.0, first.start.y.0), (first.end.x.0, first.end.y.0));
+    let second: geo::Line<Float> = geo::Line::new(
+        (second.start.x.0, second.start.y.0),
+        (second.end.x.0, second.end.y.0),
+    );
     if let Some(LineIntersection::SinglePoint {
-        intersection,
+        intersection: geo::Coordinate { x, y },
         is_proper: _is_proper,
     }) = line_intersection(first, second)
     {
-        Some(geo::Coordinate::from([intersection.x, intersection.y]))
+        Some(geo::Coordinate::from([Unit::from(x), Unit::from(y)]))
     } else {
         None
     }
 }
 
-/// Interesting points are all segment intersections and ports.
-pub fn get_interesting_points(diagram: &Diagram) -> HashSet<geo::Coordinate<Unit>, impl fasthash::FastHash> {
-    let interesting_horizontal_segments: Vec<_> = get_interesting_horizontal_segments(diagram);
-    let interesting_vertical_segments: Vec<_> = get_interesting_vertical_segments(diagram);
-    let hasher = fasthash::sea::Hash64;
-    let mut result: HashSet<geo::Coordinate<Unit>, _> = HashSet::with_capacity_and_hasher(
-        interesting_horizontal_segments.len() * interesting_vertical_segments.len(),
-        hasher,
-    );
+pub struct OrthogonalVisibilityGraph {
+    pub vertices: HashSet<geo::Coordinate<Unit>, fasthash::sea::Hash64>,
+    pub edges: HashMap<geo::Coordinate<Unit>, geo::Coordinate<Unit>, fasthash::sea::Hash64>,
+}
 
-    for geom_box in &diagram.boxes {
-        for i in 0..*geom_box.ports.top {
-            result.insert(geom_box.get_top_port(PortNumber(i), UsePadding::No));
-        }
-        for i in 0..*geom_box.ports.right {
-            result.insert(geom_box.get_right_port(PortNumber(i), UsePadding::No));
-        }
-        for i in 0..*geom_box.ports.bottom {
-            result.insert(geom_box.get_bottom_port(PortNumber(i), UsePadding::No));
-        }
-        for i in 0..*geom_box.ports.left {
-            result.insert(geom_box.get_left_port(PortNumber(i), UsePadding::No));
-        }
-    }
+impl OrthogonalVisibilityGraph {
+    pub fn new(diagram: &Diagram) -> OrthogonalVisibilityGraph {
+        let interesting_horizontal_segments: HashSet<geo::Line<Unit>> =
+            HashSet::from_iter(get_interesting_horizontal_segments(diagram).into_iter());
+        let interesting_vertical_segments: HashSet<geo::Line<Unit>> =
+            HashSet::from_iter(get_interesting_vertical_segments(diagram).into_iter());
 
-    interesting_horizontal_segments.iter().for_each(|h| {
-        interesting_vertical_segments
-            .iter()
-            .for_each(|v| match h_v_line_intersection(*h, *v) {
-                None => {}
-                Some(intersection) => {
-                    result.insert([Unit::from(intersection.x), Unit::from(intersection.y)].into());
+        let mut vertices: HashSet<geo::Coordinate<Unit>, fasthash::sea::Hash64> =
+            HashSet::with_capacity_and_hasher(
+                interesting_horizontal_segments.len() * interesting_vertical_segments.len(),
+                fasthash::sea::Hash64,
+            );
+        for geom_box in &diagram.boxes {
+            for i in 0..*geom_box.ports.top {
+                vertices.insert(geom_box.get_top_port(PortNumber(i), UsePadding::No));
+            }
+            for i in 0..*geom_box.ports.right {
+                vertices.insert(geom_box.get_right_port(PortNumber(i), UsePadding::No));
+            }
+            for i in 0..*geom_box.ports.bottom {
+                vertices.insert(geom_box.get_bottom_port(PortNumber(i), UsePadding::No));
+            }
+            for i in 0..*geom_box.ports.left {
+                vertices.insert(geom_box.get_left_port(PortNumber(i), UsePadding::No));
+            }
+        }
+
+        // TODO replace O(n^2) with a sweep
+        interesting_horizontal_segments.iter().for_each(|h| {
+            interesting_vertical_segments
+                .iter()
+                .for_each(|v| match h_v_line_intersection(*h, *v) {
+                    None => {}
+                    Some(geo::Coordinate { x, y }) => {
+                        vertices.insert([Unit::from(x), Unit::from(y)].into());
+                    }
+                })
+        });
+
+        let mut edges =
+            HashMap::with_capacity_and_hasher(vertices.len() * vertices.len(), fasthash::sea::Hash64);
+
+        for v1 in &vertices {
+            for v2 in &vertices {
+                if v1.x == v2.x && v1.y <= v2.y {
+                    if interesting_vertical_segments.contains(&geo::Line::new((v1.x, v1.y), (v2.x, v2.y)))
+                        || interesting_vertical_segments.contains(&geo::Line::new((v2.x, v2.y), (v1.x, v1.y)))
+                    {
+                        edges.insert(*v1, *v2);
+                        edges.insert(*v2, *v1);
+                    }
+                } else if v1.y == v2.y && v1.x <= v2.x {
+                    if interesting_horizontal_segments.contains(&geo::Line::new((v1.x, v1.y), (v2.x, v2.y)))
+                        || interesting_horizontal_segments
+                            .contains(&geo::Line::new((v2.x, v2.y), (v1.x, v1.y)))
+                    {
+                        edges.insert(*v1, *v2);
+                        edges.insert(*v2, *v1);
+                    }
                 }
-            })
-    });
+            }
+        }
 
-    result
+        Self { vertices, edges }
+    }
 }
 
 pub fn new_rect<T>(first: (T, T), second: (T, T)) -> geo::Rect<Unit>
@@ -789,7 +825,17 @@ where
     )
 }
 
-fn line_to_string(line: &Vec<geo::Line<Float>>) -> String {
+pub fn new_line<T>(first: (T, T), second: (T, T)) -> geo::Line<Unit>
+where
+    T: Into<Unit> + std::fmt::Debug,
+{
+    geo::Line::from([
+        (first.0.into(), first.1.into()),
+        (second.0.into(), second.1.into()),
+    ])
+}
+
+fn line_to_string(line: &Vec<geo::Line<Unit>>) -> String {
     line.iter()
         .map(|s| {
             String::from(format!(
@@ -809,6 +855,7 @@ fn points_to_string(line: &Vec<geo::Coordinate<Unit>>) -> String {
 #[cfg(test)]
 mod diagram_geom_tests {
     use approx::assert_abs_diff_eq;
+    use geo::Coordinate;
     use proptest::prelude::*;
 
     use super::*;
@@ -907,17 +954,17 @@ mod diagram_geom_tests {
             segments.as_slice(),
             &[
                 // Top line across whole diagram, caused by first box
-                [(90.0, 90.0), (410.0, 90.0)].into(),
+                new_line((90.0, 90.0), (410.0, 90.0)),
                 // Another top line across diagram caused by second box, but truncated by first box.
-                [(210.0, 90.0), (410.0, 90.0)].into(),
+                new_line((210.0, 90.0), (410.0, 90.0)),
                 // Right-port of first box to left padded side of second box
-                [(200.0, 150.0), (290.0, 150.0)].into(),
+                new_line((200.0, 150.0), (290.0, 150.0)),
                 // Left-port of second box to the right padded side of the first box
-                [(210.0, 150.0), (300.0, 150.0)].into(),
+                new_line((210.0, 150.0), (300.0, 150.0)),
                 // Bottom line across diagram caused by first box, but truncated by second box.
-                [(90.0, 210.0), (290.0, 210.0)].into(),
+                new_line((90.0, 210.0), (290.0, 210.0)),
                 // Bottom line across whole diagram caused by second box.
-                [(90.0, 210.0), (410.0, 210.0)].into(),
+                new_line((90.0, 210.0), (410.0, 210.0)),
             ],
         );
     }
@@ -947,21 +994,21 @@ mod diagram_geom_tests {
             segments.as_slice(),
             &[
                 // Top-to-bottom line caused by first (left-most) box
-                [(90.0, 90.0), (90.0, 210.0)].into(),
+                new_line((90.0, 90.0), (90.0, 210.0)),
                 // Line into the first box's top port
-                [(150.0, 90.0), (150.0, 100.0)].into(),
+                new_line((150.0, 90.0), (150.0, 100.0)),
                 // Right line caused by first box top to bottom
-                [(210.0, 90.0), (210.0, 210.0)].into(),
+                new_line((210.0, 90.0), (210.0, 210.0)),
                 // Top-to-bottom line on left side of second box
-                [(290.0, 90.0), (290.0, 210.0)].into(),
+                new_line((290.0, 90.0), (290.0, 210.0)),
                 // Top-to-bottom line on right side of second (right-most) box
-                [(410.0, 90.0), (410.0, 210.0)].into(),
+                new_line((410.0, 90.0), (410.0, 210.0)),
             ],
         );
     }
 
     #[test]
-    pub fn get_interesting_points_01() {
+    pub fn get_orthogonal_visibility_graph_01() {
         // === given ===
         let diagram = Diagram::new(vec![
             GeomBox {
@@ -977,11 +1024,13 @@ mod diagram_geom_tests {
         ]);
 
         // === when ===
-        let points = super::get_interesting_points(&diagram);
-        let points = points.into_iter().collect();
+        let graph = OrthogonalVisibilityGraph::new(&diagram);
+        let points = graph.vertices.into_iter().collect();
+        let edges: Vec<(&Coordinate<Unit>, &Coordinate<Unit>)> = graph.edges.iter().collect();
 
         // === then ===
         println!("points: {:?}", points_to_string(&points));
+        println!("edges: {:?}", edges);
         // assert_eq!(points, vec![]);
     }
 }

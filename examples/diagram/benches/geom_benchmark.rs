@@ -1,5 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use diagram::geom::{get_interesting_points, new_rect, Diagram, GeomBox, Padding, Ports};
+
+use diagram::geom::{new_rect, Diagram, GeomBox, OrthogonalVisibilityGraph, Padding, Ports};
 
 fn get_interesting_points_fifty_horizontal_boxes(c: &mut Criterion) {
     let mut geom_boxes = vec![];
@@ -16,8 +17,8 @@ fn get_interesting_points_fifty_horizontal_boxes(c: &mut Criterion) {
     }
     let diagram = Diagram::new(geom_boxes);
 
-    c.bench_function("Get interesting points - fifty horizontal boxes", |b| {
-        b.iter(|| black_box(get_interesting_points(&diagram)));
+    c.bench_function("Get orthogonal visibility graph - fifty horizontal boxes", |b| {
+        b.iter(|| black_box(OrthogonalVisibilityGraph::new(&diagram)));
     });
 }
 
