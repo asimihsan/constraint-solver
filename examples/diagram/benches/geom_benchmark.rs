@@ -1,10 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use diagram::geom::{new_rect, Diagram, GeomBox, OrthogonalVisibilityGraph, Padding, Ports};
+use diagram::primitives::{Padding, Ports};
+use diagram::{new_rect, Diagram, GeomBox, OrthogonalVisibilityGraph};
 
 fn get_interesting_points_fifty_horizontal_boxes(c: &mut Criterion) {
     let mut geom_boxes = vec![];
-    for i in 0..50 {
+    for i in 0..36 {
         let geom_box = GeomBox {
             rect: new_rect(
                 (i as f64 * 100.0, i as f64 * 100.0),

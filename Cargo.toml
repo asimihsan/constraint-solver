@@ -2,6 +2,7 @@
 
 members = [
     "examples/diagram",
+    "examples/employee-scheduling",
     "examples/nqueens",
     "local-search",
     "math-util",

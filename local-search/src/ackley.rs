@@ -24,6 +24,7 @@ pub struct AckleySolution {
 }
 impl Solution for AckleySolution {}
 impl AckleySolution {
+    #[cfg(test)]
     pub fn new(x: Vec<OrderedFloat<f64>>) -> Self {
         AckleySolution { x }
     }
@@ -38,6 +39,7 @@ impl Score for AckleyScore {
     }
 }
 impl AckleyScore {
+    #[cfg(test)]
     pub fn get_score(&self) -> f64 {
         self.0 .0
     }
@@ -80,6 +82,7 @@ pub struct AckleyInitialSolutionGenerator {
 }
 
 impl AckleyInitialSolutionGenerator {
+    #[cfg(test)]
     pub fn new(dimensions: usize) -> Self {
         AckleyInitialSolutionGenerator { dimensions }
     }
@@ -107,6 +110,7 @@ pub struct AckleyMoveProposer {
 }
 
 impl AckleyMoveProposer {
+    #[cfg(test)]
     pub fn new(dimensions: usize, min_move_size: f64, max_move_size: f64) -> Self {
         AckleyMoveProposer {
             dimensions,
@@ -202,6 +206,7 @@ pub struct AckleyPerturbation {
 }
 
 impl AckleyPerturbation {
+    #[cfg(test)]
     pub fn new(strategy: Vec<(AckleyPerturbationStrategy, u64)>) -> Self {
         Self { strategy }
     }
