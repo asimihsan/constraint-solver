@@ -755,6 +755,7 @@ mod diagram_geom_tests {
     use super::*;
 
     #[test]
+    #[ignore]
     pub fn horizontal_line_y_iterator_example_01() {
         // === given ===
         let geom_box = GeomBox {

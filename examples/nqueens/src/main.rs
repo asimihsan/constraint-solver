@@ -96,7 +96,7 @@ fn main() {
         .version("1.0")
         .arg(
             clap::Arg::with_name("seed")
-                .short("s")
+                .short('s')
                 .long("seed")
                 .value_name("STRING")
                 .help("Random seeed, any string")
@@ -106,7 +106,7 @@ fn main() {
         )
         .arg(
             clap::Arg::with_name("board_size")
-                .short("b")
+                .short('b')
                 .long("board-size")
                 .value_name("INT")
                 .help("Board size")

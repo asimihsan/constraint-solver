@@ -1,11 +1,31 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::Duration;
+use chrono::{Datelike, NaiveDate};
+
+use employee_scheduling::{get_solution, Employee, MainArgs, ScheduleScore, ScheduleSolution};
 use itertools::Itertools;
+use local_search::local_search::ScoredSolution;
+use serde_derive::Serialize;
+use wasm_bindgen::prelude::*;
 
-use employee_scheduling::{get_solution, Employee, MainArgs};
+#[derive(Serialize)]
+pub struct ScoredSolutionWrapper {
+    pub solution: ScheduleSolution,
+    pub score: ScheduleScore,
+}
 
-fn main() {
+#[wasm_bindgen]
+pub fn solve() -> JsValue {
+    let solution = example();
+    let solution_wrapper = ScoredSolutionWrapper {
+        solution: solution.solution,
+        score: solution.score,
+    };
+    JsValue::from_serde(&solution_wrapper).unwrap()
+}
+
+fn example() -> ScoredSolution<ScheduleSolution, ScheduleScore> {
     println!("employee scheduling local search example");
 
     let start_date = NaiveDate::parse_from_str("2022-05-09", "%Y-%m-%d").unwrap();
@@ -27,7 +47,7 @@ fn main() {
     let best_solutions_capacity = 64;
     let all_solutions_capacity = 100_000;
     let all_solution_iteration_expiry = 1_000;
-    let iterated_local_search_max_iterations = 1_000;
+    let iterated_local_search_max_iterations = 100;
     let max_allow_no_improvement_for = 20;
     let result = get_solution(MainArgs {
         start_date,
@@ -54,4 +74,5 @@ fn main() {
         }
         println!("---");
     }
+    result
 }

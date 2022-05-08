@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>
+        <%= htmlWebpackPlugin.options.title %>
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body data-instant-intensity="viewport-all">
+    <%= require('html-loader!./template/header.html').default %>
+        <main>
+        <div class="container-fluid">
+            <div class="px-4 my-5 text-center">
+                <h2>Howdy</h2>
+                <div class="col-lg-6 mx-auto">
+                    <p class="lead mb-4">This is a Bootstrap template. Eidt me!</p>
+                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+                        <a class="btn btn-primary btn-lg px-4 me-sm-3" href="/link1">Link #1</a>
+                        <a class="btn btn-secondary btn-lg px-4 me-sm-3" href="/link2">Link #2</a>
+                        <a class="btn btn-outline-secondary btn-lg px-4" href="/link3">Link #3</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <%= require('html-loader!./template/footer.html').default %>
+</body>
+
+</html>

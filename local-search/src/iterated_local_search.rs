@@ -142,7 +142,7 @@ where
     }
 
     pub fn execute(&mut self) -> ScoredSolution<_Solution, _Score> {
-        let mut allow_no_improvement_for = 0;
+        let _allow_no_improvement_for = 0;
         let mut current = self.solution_score_calculator.get_scored_solution(
             self.initial_solution_generator
                 .generate_initial_solution(&mut self.rng),
@@ -158,26 +158,19 @@ where
                     return best;
                 }
             }
-            if i > 0 && i % 100 == 0 {
+            if i > 0 && i % 50 == 0 {
                 println!("reset from random");
                 current = self.solution_score_calculator.get_scored_solution(
                     self.initial_solution_generator
                         .generate_initial_solution(&mut self.rng),
                 );
             }
-            if let Some(best) = self.history.get_best() {
-                if current.score < best.score {
-                    allow_no_improvement_for =
-                        (allow_no_improvement_for - 1).clamp(0, self.max_allow_no_improvement_for);
-                } else {
-                    allow_no_improvement_for =
-                        (allow_no_improvement_for + 1).clamp(0, self.max_allow_no_improvement_for);
-                }
-            }
             let perturbed =
                 self.perturbation
                     .propose_new_starting_solution(&current, &self.history, &mut self.rng);
-            let new = self.local_search.execute(perturbed, allow_no_improvement_for);
+            let new = self
+                .local_search
+                .execute(perturbed, self.max_allow_no_improvement_for);
             self.history.local_search_chose_solution(new.clone());
             current = self
                 .acceptance_criterion

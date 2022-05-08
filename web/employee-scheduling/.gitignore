@@ -1,0 +1,8 @@
+dist
+node_modules
+pkg*
+.idea
+*.code-workspace
+.vscode
+src/examples/*.html
+src/examples-old

@@ -1,0 +1,9 @@
+.bd-footer a {
+    color: #495057;
+    text-decoration: none;
+}
+
+.bd-footer a:hover, .bd-footer a:focus {
+    color: #0d6efd;
+    text-decoration: underline;
+}

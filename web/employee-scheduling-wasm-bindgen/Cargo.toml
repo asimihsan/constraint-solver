@@ -1,19 +1,22 @@
 [package]
-name = "employee-scheduling"
+name = "web-employee-scheduling"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 blake2 = "0.10.4"
 chrono = { version = "0.4.19", features = ["wasm-bindgen", "wasmbind", "js-sys", "serde"] }
-clap = "3.1.12"
-derivative = "2.2.0"
+console_error_panic_hook = "0.1.7"
+employee-scheduling = { path = "../../examples/employee-scheduling" }
+getrandom = { version = "0.2.6", features = ["js"] }
 itertools = "0.10.3"
 local-search = { path = "../../local-search" }
-ordered-float = { version = "3.0.0", features = ["serde"] }
-rand = "0.8.5"
 rand_chacha = "0.3.1"
 serde = { version = "1.0.137", features = ["derive"] }
 serde_derive = "1.0.137"
+wasm-bindgen = { version = "0.2.80", features = ["serde-serialize"] }

@@ -211,9 +211,9 @@ where
         // TODO better heuristic for creating a diverse best solution set even if the candidate solution has a worse
         // score.
         let worst_solution = self.best_solutions.iter().next_back().unwrap().clone();
-        if solution.score < worst_solution.score {
+        if solution.score <= worst_solution.score {
             self.best_solutions.remove(&worst_solution);
-            self.best_solutions.insert(solution.clone());
+            self.best_solutions.insert(solution);
         }
     }
 

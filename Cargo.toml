@@ -6,6 +6,7 @@ members = [
     "examples/nqueens",
     "local-search",
     "math-util",
+    "web/employee-scheduling-wasm-bindgen",
 ]
 
 [profile.release]

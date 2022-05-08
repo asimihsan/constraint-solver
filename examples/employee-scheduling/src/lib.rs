@@ -11,20 +11,113 @@ use ordered_float::OrderedFloat;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
-use local_search::iterated_local_search::Perturbation;
+use crate::ScheduleRandomMove::{ChangeDay, SwapDays};
+use blake2::{digest::consts::U32, Blake2b, Digest};
+use local_search::iterated_local_search::{AcceptanceCriterion, IteratedLocalSearch, Perturbation};
 use local_search::local_search::{
-    History, InitialSolutionGenerator, MoveProposer, Score, ScoredSolution, Solution, SolutionScoreCalculator,
+    History, InitialSolutionGenerator, LocalSearch, MoveProposer, Score, ScoredSolution, Solution,
+    SolutionScoreCalculator,
 };
+use rand_chacha::rand_core::SeedableRng;
+use serde_derive::Serialize;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+type Blake2b256 = Blake2b<U32>;
+
+pub struct MainArgs<'a> {
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub employees: BTreeSet<Employee>,
+    pub employee_to_holidays: HashMap<Employee, HashSet<Holiday>>,
+    pub seed: &'a str,
+    pub local_search_max_iterations: u64,
+    pub window_size: u64,
+    pub best_solutions_capacity: usize,
+    pub all_solutions_capacity: usize,
+    pub all_solution_iteration_expiry: u64,
+    pub iterated_local_search_max_iterations: u64,
+    pub max_allow_no_improvement_for: u64,
+}
+
+pub fn hash_str(input: &str) -> [u8; 32] {
+    let mut hasher = Blake2b256::new();
+    hasher.update(input.as_bytes());
+    let seed = hasher.finalize();
+    seed.into()
+}
+
+pub fn get_solution(args: MainArgs) -> ScoredSolution<ScheduleSolution, ScheduleScore> {
+    let seed = hash_str(args.seed);
+    // let move_proposer = ScheduleMoveProposer::new(args.employees.clone());
+    let move_proposer = ScheduleRandomMoveProposer::default();
+    let solution_score_calculator = ScheduleSolutionScoreCalculator::new(args.employee_to_holidays.clone());
+    let solver_rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    let local_search: LocalSearch<
+        rand_chacha::ChaCha20Rng,
+        ScheduleSolution,
+        ScheduleScore,
+        ScheduleSolutionScoreCalculator,
+        ScheduleRandomMoveProposer,
+    > = LocalSearch::new(
+        move_proposer,
+        solution_score_calculator,
+        args.local_search_max_iterations,
+        args.window_size.try_into().unwrap(),
+        args.best_solutions_capacity,
+        args.all_solutions_capacity,
+        args.all_solution_iteration_expiry,
+        solver_rng,
+    );
+
+    let initial_solution_generator = ScheduleInitialSolutionGenerator::new(
+        args.start_date,
+        args.end_date,
+        args.employees.clone().iter().copied().collect(),
+        args.employee_to_holidays.clone(),
+    );
+    let solution_score_calculator = ScheduleSolutionScoreCalculator::new(args.employee_to_holidays.clone());
+    let perturbation = SchedulePerturbation::default();
+    let history = History::<rand_chacha::ChaCha20Rng, ScheduleSolution, ScheduleScore>::new(
+        args.best_solutions_capacity,
+        args.all_solutions_capacity,
+        args.all_solution_iteration_expiry,
+    );
+    let acceptance_criterion = AcceptanceCriterion::default();
+    let iterated_local_search_rng = rand_chacha::ChaCha20Rng::from_seed(seed);
+    let iterated_local_search_max_iterations = args.iterated_local_search_max_iterations;
+    let max_allow_no_improvement_for = args.max_allow_no_improvement_for;
+    let mut iterated_local_search: IteratedLocalSearch<
+        rand_chacha::ChaCha20Rng,
+        ScheduleSolution,
+        ScheduleScore,
+        ScheduleSolutionScoreCalculator,
+        ScheduleRandomMoveProposer,
+        ScheduleInitialSolutionGenerator,
+        SchedulePerturbation,
+    > = IteratedLocalSearch::new(
+        initial_solution_generator,
+        solution_score_calculator,
+        local_search,
+        perturbation,
+        history,
+        acceptance_criterion,
+        iterated_local_search_max_iterations,
+        max_allow_no_improvement_for,
+        iterated_local_search_rng,
+    );
+
+    let result = iterated_local_search.execute();
+    result
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct Employee {
     pub id: i64,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize)]
 pub struct Holiday(NaiveDate);
 
-#[derive(Derivative)]
+#[derive(Derivative, Serialize)]
 #[derivative(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ScheduleSolution {
     #[derivative(PartialEq = "ignore")]
@@ -46,13 +139,25 @@ pub struct ScheduleSolution {
 }
 
 impl ScheduleSolution {
-    pub fn get_employee_for_date(&self, date: NaiveDate) -> Option<Employee> {
+    fn get_date_index(&self, date: NaiveDate) -> Option<usize> {
         if date < self.start_date || date > self.end_date {
             return None;
         }
         let days_diff = date.signed_duration_since(self.start_date);
         let index = days_diff.num_days() as usize;
-        Some(self.date_to_employee[index])
+        Some(index)
+    }
+
+    pub fn get_mut_employee_for_date(&mut self, date: NaiveDate) -> Option<&mut Employee> {
+        match self.get_date_index(date) {
+            None => None,
+            Some(index) => self.date_to_employee.get_mut(index),
+        }
+    }
+
+    pub fn get_employee_for_date(&self, date: NaiveDate) -> Option<Employee> {
+        self.get_date_index(date)
+            .map(|index| self.date_to_employee[index])
     }
 
     pub fn get_employees_to_days(&self) -> HashMap<Employee, Vec<NaiveDate>> {
@@ -71,12 +176,42 @@ impl ScheduleSolution {
         for (index, current_date) in self.start_date.iter_days().enumerate() {
             let employee = self.date_to_employee[index];
             result.push((current_date, employee));
-            if current_date > self.end_date {
+            if current_date >= self.end_date {
                 break;
             }
         }
         result
     }
+}
+
+fn get_weekday_to_employee_counts_score(solution: &ScheduleSolution) -> f64 {
+    let mut day_counts = HashMap::new();
+    for (date, employee) in solution.get_days_to_employees() {
+        if date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun {
+            continue;
+        }
+        let day_count = day_counts.entry(date.weekday()).or_insert_with(HashMap::new);
+        *day_count.entry(employee).or_insert_with(|| 0) += 1;
+    }
+
+    let mut score = 0.0;
+    for (day, employee_count) in day_counts {
+        if employee_count.len() <= 1 {
+            continue;
+        }
+        match employee_count.values().into_iter().minmax() {
+            MinMaxResult::NoElements => {}
+            MinMaxResult::OneElement(_) => {}
+            MinMaxResult::MinMax(min, _max) => {
+                score += *min as f64;
+            }
+        }
+    }
+    score
+}
+
+fn is_weekend(date: &chrono::NaiveDate) -> bool {
+    date.weekday() == Weekday::Sat || date.weekday() == Weekday::Sun
 }
 
 impl Debug for ScheduleSolution {
@@ -94,7 +229,7 @@ impl Debug for ScheduleSolution {
 
 impl Solution for ScheduleSolution {}
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct ScheduleScore {
     pub hard_score: OrderedFloat<f64>,
     pub soft_score: OrderedFloat<f64>,
@@ -149,6 +284,29 @@ impl SolutionScoreCalculator for ScheduleSolutionScoreCalculator {
             }
         }
 
+        // Hard constraint, can't be scheduled for consecutive weekends
+        for window in days_to_employees.windows(9) {
+            let date1 = window[0];
+            let date2 = window[1];
+            let date3 = window[7];
+            let date4 = window[8];
+            if !(is_weekend(&date1.0) && is_weekend(&date2.0)) {
+                continue;
+            }
+            if date1.1 == date3.1 {
+                hard_score += 1.0;
+            }
+            if date1.1 == date4.1 {
+                hard_score += 1.0;
+            }
+            if date2.1 == date3.1 {
+                hard_score += 1.0;
+            }
+            if date2.1 == date4.1 {
+                hard_score += 1.0;
+            }
+        }
+
         // Hard constraint, no more than 3 times per 14 days.
         for window in days_to_employees.windows(14) {
             let violations = window
@@ -161,32 +319,28 @@ impl SolutionScoreCalculator for ScheduleSolutionScoreCalculator {
             hard_score += violations as f64;
         }
 
-        // Soft constraint, try to schedule employees on same weekdays
-        for days in employees_to_days.values() {
-            let counts = days
+        // Soft constraint, no more than 2 times per 7 days.
+        for window in days_to_employees.windows(7) {
+            let violations = window
                 .iter()
-                .filter(|day| day.weekday() != Weekday::Sat && day.weekday() != Weekday::Sun)
-                .counts();
-            if counts.is_empty() {
-                continue;
-            }
-            let max_count = counts.iter().max_by_key(|elem| *elem.1).unwrap();
-            for (date, count) in &counts {
-                if **date != **max_count.0 {
-                    continue;
-                }
-                soft_score += *count as f64;
-            }
+                .map(|(day, employee)| employee)
+                .counts()
+                .into_iter()
+                .filter(|(_employee, count)| *count > 2)
+                .count();
+            soft_score += violations as f64;
         }
+
+        // Soft constraint, try to schedule employees on same weekdays
+        soft_score += get_weekday_to_employee_counts_score(&solution);
 
         // Difference in total days is a soft constraint.
         let min_max_days = employees_to_days
             .iter()
             .map(|(_employee, days)| days.len())
             .minmax();
-        match min_max_days {
-            MinMaxResult::MinMax(min, max) => soft_score += (max - min) as f64,
-            _ => {}
+        if let MinMaxResult::MinMax(min, max) = min_max_days {
+            soft_score += (max - min) as f64
         }
 
         // Difference in total weekends is a soft constraint.
@@ -199,9 +353,8 @@ impl SolutionScoreCalculator for ScheduleSolutionScoreCalculator {
             })
             .map(|days: Vec<&NaiveDate>| days.len())
             .minmax();
-        match min_max_weekends {
-            MinMaxResult::MinMax(min, max) => soft_score += (max - min) as f64,
-            _ => {}
+        if let MinMaxResult::MinMax(min, max) = min_max_weekends {
+            soft_score += (max - min) as f64
         }
 
         ScoredSolution {
@@ -256,6 +409,77 @@ impl InitialSolutionGenerator for ScheduleInitialSolutionGenerator {
             date_to_employee,
             employees: self.employees.clone(),
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ScheduleRandomMove {
+    ChangeDay,
+    SwapDays,
+}
+
+pub struct ScheduleRandomMoveProposer {
+    random_move_types: Vec<(ScheduleRandomMove, u64)>,
+}
+
+impl Default for ScheduleRandomMoveProposer {
+    fn default() -> Self {
+        Self {
+            random_move_types: vec![(ChangeDay, 1), (SwapDays, 4)],
+        }
+    }
+}
+
+impl MoveProposer for ScheduleRandomMoveProposer {
+    type R = rand_chacha::ChaCha20Rng;
+    type Solution = ScheduleSolution;
+
+    fn iter_local_moves(
+        &self,
+        start: &Self::Solution,
+        rng: &mut Self::R,
+    ) -> Box<dyn Iterator<Item = Self::Solution>> {
+        struct MoveIterator {
+            solution: ScheduleSolution,
+            days_to_employees: Vec<(NaiveDate, Employee)>,
+            random_move_types: Vec<(ScheduleRandomMove, u64)>,
+            rng: rand_chacha::ChaCha20Rng,
+        }
+        impl Iterator for MoveIterator {
+            type Item = ScheduleSolution;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let current_move = self
+                    .random_move_types
+                    .choose_weighted(&mut self.rng, |s| s.1)
+                    .unwrap()
+                    .0;
+                let mut new_solution: ScheduleSolution = self.solution.clone();
+                match current_move {
+                    ChangeDay => {
+                        let (day, _current_employee) = self.days_to_employees.choose(&mut self.rng).unwrap();
+                        let new_employee = self.solution.employees.choose(&mut self.rng).unwrap();
+                        *new_solution.get_mut_employee_for_date(*day).unwrap() = *new_employee;
+                    }
+                    SwapDays => {
+                        let xs: Vec<&(NaiveDate, Employee)> =
+                            self.days_to_employees.choose_multiple(&mut self.rng, 2).collect();
+                        let (day1, employee1) = xs[0];
+                        let (day2, employee2) = xs[1];
+                        *new_solution.get_mut_employee_for_date(*day1).unwrap() = *employee2;
+                        *new_solution.get_mut_employee_for_date(*day2).unwrap() = *employee1;
+                    }
+                }
+                Some(new_solution)
+            }
+        }
+
+        Box::new(MoveIterator {
+            solution: start.clone(),
+            days_to_employees: start.get_days_to_employees(),
+            random_move_types: self.random_move_types.clone(),
+            rng: rng.clone(),
+        })
     }
 }
 
@@ -327,7 +551,7 @@ impl MoveProposer for ScheduleMoveProposer {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SchedulePerturbationStrategy {
     DoNothing,
     ChangeDaysSubsetRandomly,
@@ -360,7 +584,7 @@ impl Perturbation for SchedulePerturbation {
         history: &History<Self::_R, Self::_Solution, Self::_Score>,
         rng: &mut Self::_R,
     ) -> Self::_Solution {
-        let current_strategy = self.strategy.choose_weighted(rng, |s| s.1).unwrap().0.clone();
+        let current_strategy = self.strategy.choose_weighted(rng, |s| s.1).unwrap().0;
         let mut new_solution = current.solution.clone();
         match current_strategy {
             SchedulePerturbationStrategy::DoNothing => new_solution,
