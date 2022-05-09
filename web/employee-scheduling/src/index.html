@@ -10,23 +10,26 @@
 </head>
 
 <body data-instant-intensity="viewport-all">
-    <%= require('html-loader!./template/header.html').default %>
+    <div class="col-lg-8 mx-auto p-3 py-md-5" id="app">
+        <header class="d-flex align-items-center pb-3 mb-5 border-bottom">
+            <a href="/" class="d-flex align-items-center text-dark text-decoration-none">
+                <h1 class="fs-4">Employee Scheduling</h1>
+            </a>
+        </header>
+
         <main>
-        <div class="container-fluid">
-            <div class="px-4 my-5 text-center">
-                <h2>Howdy</h2>
-                <div class="col-lg-6 mx-auto">
-                    <p class="lead mb-4">This is a Bootstrap template. Eidt me!</p>
-                    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
-                        <a class="btn btn-primary btn-lg px-4 me-sm-3" href="/link1">Link #1</a>
-                        <a class="btn btn-secondary btn-lg px-4 me-sm-3" href="/link2">Link #2</a>
-                        <a class="btn btn-outline-secondary btn-lg px-4" href="/link3">Link #3</a>
-                    </div>
-                </div>
+            <h2>Inputs</h2>
+            <ul>
+                <li v-for="employee in employees" :key="employee.id">
+                    {{ employee.id }}
+                </li>
+            </ul>
+            <div class="mb-5">
+                <button @click="startSolving" class="btn btn-primary btn-lg px-4" :disabled="!isSolvingButtonActive">Start solving</button>
             </div>
-        </div>
-    </main>
-    <%= require('html-loader!./template/footer.html').default %>
+            <hr class="col-3 col-md-2 mb-5">
+        </main>
+    </div>
 </body>
 
 </html>
