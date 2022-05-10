@@ -19,7 +19,7 @@ use local_search::local_search::{
     SolutionScoreCalculator,
 };
 use rand_chacha::rand_core::SeedableRng;
-use serde_derive::Serialize;
+use serde::{Deserialize, Serialize};
 
 type Blake2b256 = Blake2b<U32>;
 
@@ -109,15 +109,15 @@ pub fn get_solution(args: MainArgs) -> ScoredSolution<ScheduleSolution, Schedule
     result
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Employee {
     pub id: i64,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize)]
-pub struct Holiday(NaiveDate);
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct Holiday(pub NaiveDate);
 
-#[derive(Derivative, Serialize)]
+#[derive(Derivative, Serialize, Deserialize)]
 #[derivative(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ScheduleSolution {
     #[derivative(PartialEq = "ignore")]
@@ -229,7 +229,7 @@ impl Debug for ScheduleSolution {
 
 impl Solution for ScheduleSolution {}
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct ScheduleScore {
     pub hard_score: OrderedFloat<f64>,
     pub soft_score: OrderedFloat<f64>,

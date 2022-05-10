@@ -1,46 +1,72 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
-use chrono::Duration;
 use chrono::{Datelike, NaiveDate};
 
-use employee_scheduling::{get_solution, Employee, MainArgs, ScheduleScore, ScheduleSolution};
+use employee_scheduling::{get_solution, Employee, Holiday, MainArgs, ScheduleScore, ScheduleSolution};
 use itertools::Itertools;
 use local_search::local_search::ScoredSolution;
-use serde_derive::Serialize;
 use wasm_bindgen::prelude::*;
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct EmployeeSchedulingInput {
+    #[serde(rename = "startDate")]
+    pub start_date: NaiveDate,
+
+    #[serde(rename = "endDate")]
+    pub end_date: NaiveDate,
+
+    pub employees: Vec<Employee>,
+
+    #[serde(rename = "employeeHolidays")]
+    pub employee_holidays: Vec<Vec<NaiveDate>>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum EmployeeSchedulingError {
+    #[error("deserializing input failed")]
+    DeserializationError,
+}
 
 #[derive(Serialize)]
 pub struct ScoredSolutionWrapper {
-    pub solution: ScheduleSolution,
     pub score: ScheduleScore,
+    pub days_to_employees: Vec<(NaiveDate, Employee)>,
 }
 
 #[wasm_bindgen]
-pub fn solve() -> JsValue {
-    let solution = example();
+pub fn solve(input: &JsValue) -> JsValue {
+    let input: EmployeeSchedulingInput = input.into_serde().unwrap();
+    let employee_to_holidays: HashMap<Employee, HashSet<Holiday>> =
+        itertools::zip(input.employees.clone(), input.employee_holidays)
+            .map(|(employee, holidays)| {
+                (
+                    employee,
+                    HashSet::from_iter(holidays.iter().map(|holiday| Holiday(*holiday))),
+                )
+            })
+            .collect();
+    let solution = solve_inner(
+        input.start_date,
+        input.end_date,
+        BTreeSet::from_iter(input.employees.iter().copied()),
+        employee_to_holidays,
+    );
     let solution_wrapper = ScoredSolutionWrapper {
-        solution: solution.solution,
         score: solution.score,
+        days_to_employees: solution.solution.get_days_to_employees(),
     };
     JsValue::from_serde(&solution_wrapper).unwrap()
 }
 
-fn example() -> ScoredSolution<ScheduleSolution, ScheduleScore> {
+fn solve_inner(
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    employees: BTreeSet<Employee>,
+    employee_to_holidays: HashMap<Employee, HashSet<Holiday>>,
+) -> ScoredSolution<ScheduleSolution, ScheduleScore> {
     println!("employee scheduling local search example");
-
-    let start_date = NaiveDate::parse_from_str("2022-05-09", "%Y-%m-%d").unwrap();
-    let end_date = start_date + Duration::days(30);
-    let employees = BTreeSet::from([
-        Employee { id: 0 },
-        Employee { id: 1 },
-        Employee { id: 2 },
-        Employee { id: 3 },
-        Employee { id: 4 },
-        Employee { id: 5 },
-        Employee { id: 6 },
-    ]);
-    let employee_to_holidays = HashMap::new();
-
     let seed = "42";
     let local_search_max_iterations = 1_000;
     let window_size = 100;

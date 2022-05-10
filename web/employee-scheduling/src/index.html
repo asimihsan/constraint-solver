@@ -10,7 +10,7 @@
 </head>
 
 <body data-instant-intensity="viewport-all">
-    <div class="col-lg-8 mx-auto p-3 py-md-5" id="app">
+    <div class="container col-lg-8 mx-auto p-3 py-md-5" id="app">
         <header class="d-flex align-items-center pb-3 mb-5 border-bottom">
             <a href="/" class="d-flex align-items-center text-dark text-decoration-none">
                 <h1 class="fs-4">Employee Scheduling</h1>
@@ -19,11 +19,24 @@
 
         <main>
             <h2>Inputs</h2>
-            <ul>
-                <li v-for="employee in employees" :key="employee.id">
-                    {{ employee.id }}
-                </li>
-            </ul>
+            <form @submit.prevent="addEmployee">
+                <div class="mb-3">
+                    <label for="startDate" class="form-label">Start date</label>
+                    <input id="startDate" v-model="startDate">
+                </div>
+                <div class="mb-3">
+                    <label for="endDate" class="form-label">End date</label>
+                    <input id="endDate" v-model="endDate">
+                </div>
+                <button>Add employee</button>
+                <ul>
+                    <li v-for="employee in employees" :key="employee.id">
+                        <button @click="removeEmployee(employee)">X</button>
+                        Employee {{ employee.id }}
+                        <input v-model="modifyEmployeeHolidays">
+                    </li>
+                </ul>
+            </form>
             <div class="mb-5">
                 <button @click="startSolving" class="btn btn-primary btn-lg px-4" :disabled="!isSolvingButtonActive">Start solving</button>
             </div>
