@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use chrono::{Datelike, Duration, NaiveDate};
 use itertools::Itertools;
 
-use employee_scheduling::{get_solution, Employee, MainArgs};
+use employee_scheduling::{get_ils, Employee, MainArgs};
 
 fn main() {
     println!("employee scheduling local search example");
@@ -27,9 +27,10 @@ fn main() {
     let best_solutions_capacity = 64;
     let all_solutions_capacity = 100_000;
     let all_solution_iteration_expiry = 1_000;
-    let iterated_local_search_max_iterations = 1_000;
+    let iterated_local_search_max_iterations = 250;
     let max_allow_no_improvement_for = 20;
-    let result = get_solution(MainArgs {
+
+    let mut iterated_local_search = get_ils(MainArgs {
         start_date,
         end_date,
         employees,
@@ -43,6 +44,11 @@ fn main() {
         iterated_local_search_max_iterations,
         max_allow_no_improvement_for,
     });
+
+    while !iterated_local_search.is_finished() {
+        iterated_local_search.execute_round();
+    }
+    let result = iterated_local_search.get_best_solution();
 
     println!("result.solution:\n{:?}", result.solution);
     println!("result.score: {:?}", result.score);

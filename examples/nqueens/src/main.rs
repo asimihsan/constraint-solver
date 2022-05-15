@@ -86,8 +86,10 @@ fn get_solution(args: MainArgs) -> ScoredSolution<NQueensSolution, NQueensScore>
         iterated_local_search_rng,
     );
 
-    let result = iterated_local_search.execute();
-    result
+    while !iterated_local_search.is_finished() {
+        iterated_local_search.execute_round();
+    }
+    iterated_local_search.get_best_solution()
 }
 
 fn main() {

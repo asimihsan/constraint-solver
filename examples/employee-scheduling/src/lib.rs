@@ -22,6 +22,15 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 type Blake2b256 = Blake2b<U32>;
+pub type IlsType = IteratedLocalSearch<
+    rand_chacha::ChaCha20Rng,
+    ScheduleSolution,
+    ScheduleScore,
+    ScheduleSolutionScoreCalculator,
+    ScheduleRandomMoveProposer,
+    ScheduleInitialSolutionGenerator,
+    SchedulePerturbation,
+>;
 
 pub struct MainArgs<'a> {
     pub start_date: NaiveDate,
@@ -45,7 +54,7 @@ pub fn hash_str(input: &str) -> [u8; 32] {
     seed.into()
 }
 
-pub fn get_solution(args: MainArgs) -> ScoredSolution<ScheduleSolution, ScheduleScore> {
+pub fn get_ils(args: MainArgs) -> IlsType {
     let seed = hash_str(args.seed);
     // let move_proposer = ScheduleMoveProposer::new(args.employees.clone());
     let move_proposer = ScheduleRandomMoveProposer::default();
@@ -85,7 +94,7 @@ pub fn get_solution(args: MainArgs) -> ScoredSolution<ScheduleSolution, Schedule
     let iterated_local_search_rng = rand_chacha::ChaCha20Rng::from_seed(seed);
     let iterated_local_search_max_iterations = args.iterated_local_search_max_iterations;
     let max_allow_no_improvement_for = args.max_allow_no_improvement_for;
-    let mut iterated_local_search: IteratedLocalSearch<
+    let iterated_local_search: IteratedLocalSearch<
         rand_chacha::ChaCha20Rng,
         ScheduleSolution,
         ScheduleScore,
@@ -104,9 +113,7 @@ pub fn get_solution(args: MainArgs) -> ScoredSolution<ScheduleSolution, Schedule
         max_allow_no_improvement_for,
         iterated_local_search_rng,
     );
-
-    let result = iterated_local_search.execute();
-    result
+    iterated_local_search
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
